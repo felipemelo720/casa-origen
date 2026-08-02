@@ -1,0 +1,17 @@
+{
+  "name": "Casa Origen",
+  "short_name": "Casa Origen",
+  "description": "Cocina chilena contemporánea. Pide delivery o retiro en tienda.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fdfcfb",
+  "theme_color": "#fdfcfb",
+  "lang": "es-CL",
+  "icons": [
+    { "src": "/icons/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

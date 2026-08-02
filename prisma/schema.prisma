@@ -1,0 +1,951 @@
+// ---------------------------------------------------------------------------
+//  Casa Origen — data model
+//
+//  Conventions
+//  * Monetary values are stored as integers in the currency's smallest unit
+//    (see `CURRENCY` in src/constants/money.ts). Integer arithmetic removes
+//    floating-point drift and keeps every amount JSON-serialisable across the
+//    server/client boundary.
+//  * Every table that is read on a hot path carries a covering index.
+//  * Snapshots (order lines) intentionally denormalise name/price so that a
+//    later catalogue edit never rewrites history.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+//  Enums
+// ===========================================================================
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum PaymentMethodCode {
+  CASH
+  DEBIT
+  CREDIT
+  TRANSFER
+}
+
+enum ProductAvailability {
+  AVAILABLE
+  OUT_OF_STOCK
+  SCHEDULED
+}
+
+enum VariantSelectionType {
+  SINGLE
+  MULTIPLE
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum PromotionScope {
+  ALL
+  CATEGORY
+  PRODUCT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  STATUS_CHANGE
+  EXPORT
+}
+
+enum BannerPlacement {
+  HERO
+  MENU_TOP
+  SIDEBAR
+  CHECKOUT
+}
+
+// ===========================================================================
+//  Identity & access
+//  The four models below are the contract required by Better Auth. Extra
+//  columns (phone, roleId, isActive) are declared to Better Auth as
+//  `user.additionalFields`.
+// ===========================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  phone         String?
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+
+  roleId String?
+  role   Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions        Session[]
+  accounts        Account[]
+  customer        Customer?
+  auditLogs       AuditLog[]
+  statusChanges   OrderStatusHistory[]
+  deliveredOrders Order[]              @relation("OrderCourier")
+
+  @@index([roleId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([identifier])
+  @@index([expiresAt])
+  @@map("verifications")
+}
+
+model Role {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+  /// System roles cannot be renamed or deleted from the admin UI.
+  isSystem    Boolean @default(false)
+  level       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+
+  @@index([slug])
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  /// Canonical form: `resource:action` (e.g. `product:update`).
+  key         String  @unique
+  resource    String
+  action      String
+  description String?
+
+  createdAt DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@index([resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// ===========================================================================
+//  Customers
+// ===========================================================================
+
+model Customer {
+  id        String  @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String?
+  phone     String
+
+  /// Set when the customer registered an account; null for guest checkout.
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  notes      String?
+  isBlocked  Boolean @default(false)
+  orderCount Int     @default(0)
+  totalSpent Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  addresses CustomerAddress[]
+  orders    Order[]
+
+  @@unique([phone])
+  @@index([email])
+  @@index([createdAt])
+  @@index([totalSpent])
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id        String  @id @default(cuid())
+  label     String?
+  street    String
+  reference String?
+  isDefault Boolean @default(false)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  communeId String
+  commune   Commune @relation(fields: [communeId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([communeId])
+  @@map("customer_addresses")
+}
+
+/// A delivery zone. Named "commune" to match Chilean addressing.
+model Commune {
+  id           String  @id @default(cuid())
+  name         String  @unique
+  slug         String  @unique
+  /// Delivery fee in minor currency units.
+  deliveryFee  Int     @default(0)
+  /// Minimum order subtotal required to deliver here.
+  minOrder     Int     @default(0)
+  /// Extra minutes added to the estimated delivery time.
+  extraMinutes Int     @default(0)
+  isActive     Boolean @default(true)
+  sortOrder    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  addresses CustomerAddress[]
+  orders    Order[]
+
+  @@index([isActive, sortOrder])
+  @@map("communes")
+}
+
+// ===========================================================================
+//  Catalogue
+// ===========================================================================
+
+model Category {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String?
+  image       String?
+  icon        String?
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  /// Self-relation implementing subcategories (one level is enforced in the
+  /// service layer; the schema itself allows arbitrary depth).
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products   Product[]
+  promotions PromotionCategory[]
+
+  @@index([parentId])
+  @@index([isActive, sortOrder])
+  @@map("categories")
+}
+
+model Tag {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  slug      String  @unique
+  color     String  @default("#e2725b")
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products ProductTag[]
+
+  @@index([isActive])
+  @@map("tags")
+}
+
+model Ingredient {
+  id         String  @id @default(cuid())
+  name       String  @unique
+  slug       String  @unique
+  /// Marks common allergens so the storefront can surface a warning.
+  isAllergen Boolean @default(false)
+  isActive   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products ProductIngredient[]
+
+  @@index([isActive])
+  @@map("ingredients")
+}
+
+model Product {
+  id               String  @id @default(cuid())
+  name             String
+  slug             String  @unique
+  sku              String? @unique
+  shortDescription String?
+  description      String?
+  image            String?
+
+  /// Base price in minor currency units.
+  price      Int
+  /// Promotional price; when set and lower than `price` it becomes effective.
+  offerPrice Int?
+
+  isActive     Boolean             @default(true)
+  isVisible    Boolean             @default(true)
+  isFeatured   Boolean             @default(false)
+  availability ProductAvailability @default(AVAILABLE)
+
+  /// Estimated preparation time in minutes.
+  prepMinutes Int     @default(15)
+  allowNotes  Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  /// Denormalised counter maintained inside the order transaction; powers the
+  /// "most sold" reports without scanning order_items.
+  soldCount Int @default(0)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images        ProductImage[]
+  tags          ProductTag[]
+  ingredients   ProductIngredient[]
+  variantGroups VariantGroup[]
+  extras        ProductExtra[]
+  orderItems    OrderItem[]
+  promotions    PromotionProduct[]
+
+  @@index([categoryId, isActive, sortOrder])
+  @@index([isActive, isVisible, isFeatured])
+  @@index([availability])
+  @@index([soldCount])
+  @@index([createdAt])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  url       String
+  alt       String?
+  sortOrder Int     @default(0)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([productId, sortOrder])
+  @@map("product_images")
+}
+
+model ProductTag {
+  productId String
+  tagId     String
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@index([tagId])
+  @@map("product_tags")
+}
+
+model ProductIngredient {
+  productId    String
+  ingredientId String
+  /// When true the customer may remove this ingredient at checkout.
+  isRemovable  Boolean @default(true)
+
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([productId, ingredientId])
+  @@index([ingredientId])
+  @@map("product_ingredients")
+}
+
+/// A set of mutually related choices for a product ("Size", "Cooking point").
+model VariantGroup {
+  id            String               @id @default(cuid())
+  name          String
+  selectionType VariantSelectionType @default(SINGLE)
+  isRequired    Boolean              @default(true)
+  minSelect     Int                  @default(1)
+  maxSelect     Int                  @default(1)
+  sortOrder     Int                  @default(0)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  options VariantOption[]
+
+  @@index([productId, sortOrder])
+  @@map("variant_groups")
+}
+
+model VariantOption {
+  id          String  @id @default(cuid())
+  name        String
+  /// Signed delta applied to the product price, in minor currency units.
+  priceDelta  Int     @default(0)
+  isDefault   Boolean @default(false)
+  isAvailable Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  groupId String
+  group   VariantGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItemVariants OrderItemVariant[]
+
+  @@index([groupId, sortOrder])
+  @@map("variant_options")
+}
+
+/// A globally reusable add-on ("Extra cheese"), attachable to many products.
+model Extra {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+  price       Int     @default(0)
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products   ProductExtra[]
+  orderItems OrderItemExtra[]
+
+  @@index([isActive, sortOrder])
+  @@map("extras")
+}
+
+model ProductExtra {
+  productId     String
+  extraId       String
+  /// Per-product override of the extra's catalogue price.
+  priceOverride Int?
+  maxQuantity   Int    @default(5)
+  sortOrder     Int    @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  extra   Extra   @relation(fields: [extraId], references: [id], onDelete: Cascade)
+
+  @@id([productId, extraId])
+  @@index([extraId])
+  @@map("product_extras")
+}
+
+// ===========================================================================
+//  Promotions & coupons
+// ===========================================================================
+
+model Promotion {
+  id           String         @id @default(cuid())
+  name         String
+  slug         String         @unique
+  description  String?
+  discountType DiscountType
+  /// Percentage points (0-100) or a fixed amount in minor currency units.
+  value        Int
+  scope        PromotionScope @default(ALL)
+  /// Only applies once the cart subtotal reaches this amount.
+  minSubtotal  Int            @default(0)
+  /// Caps a percentage discount; null means uncapped.
+  maxDiscount  Int?
+  priority     Int            @default(0)
+  isActive     Boolean        @default(true)
+  startsAt     DateTime
+  endsAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  categories PromotionCategory[]
+  products   PromotionProduct[]
+  orders     Order[]
+
+  @@index([isActive, startsAt, endsAt])
+  @@index([priority])
+  @@map("promotions")
+}
+
+model PromotionCategory {
+  promotionId String
+  categoryId  String
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, categoryId])
+  @@index([categoryId])
+  @@map("promotion_categories")
+}
+
+model PromotionProduct {
+  promotionId String
+  productId   String
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, productId])
+  @@index([productId])
+  @@map("promotion_products")
+}
+
+model Coupon {
+  id               String       @id @default(cuid())
+  code             String       @unique
+  description      String?
+  discountType     DiscountType
+  value            Int
+  minSubtotal      Int          @default(0)
+  maxDiscount      Int?
+  /// Total redemptions allowed; null means unlimited.
+  usageLimit       Int?
+  usageCount       Int          @default(0)
+  /// Redemptions allowed per customer.
+  perCustomerLimit Int          @default(1)
+  /// When true the coupon also zeroes the delivery fee.
+  freeDelivery     Boolean      @default(false)
+  isActive         Boolean      @default(true)
+  startsAt         DateTime
+  endsAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  redemptions CouponRedemption[]
+  orders      Order[]
+
+  @@index([isActive, startsAt, endsAt])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id             String  @id @default(cuid())
+  couponId       String
+  orderId        String  @unique
+  customerId     String?
+  discountAmount Int
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([couponId])
+  @@index([customerId])
+  @@map("coupon_redemptions")
+}
+
+// ===========================================================================
+//  Orders
+// ===========================================================================
+
+model Order {
+  id   String @id @default(cuid())
+  /// Human-facing sequential-ish identifier shown to customers and staff.
+  code String @unique
+
+  status        OrderStatus   @default(NEW)
+  type          OrderType     @default(DELIVERY)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  // --- Customer snapshot -------------------------------------------------
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  firstName  String
+  lastName   String
+  phone      String
+  email      String?
+
+  // --- Address snapshot --------------------------------------------------
+  street      String?
+  reference   String?
+  communeId   String?
+  commune     Commune? @relation(fields: [communeId], references: [id], onDelete: SetNull)
+  communeName String?
+
+  // --- Money (minor currency units) --------------------------------------
+  subtotal      Int
+  discountTotal Int  @default(0)
+  deliveryFee   Int  @default(0)
+  total         Int
+  /// Amount the customer will pay with, when paying cash.
+  cashGiven     Int?
+  /// Change owed back to the customer.
+  changeDue     Int?
+
+  paymentMethodId String
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
+  couponId    String?
+  coupon      Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  promotionId String?
+  promotion   Promotion? @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+
+  notes              String?
+  cancellationReason String?
+  estimatedMinutes   Int?
+
+  courierId String?
+  courier   User?   @relation("OrderCourier", fields: [courierId], references: [id], onDelete: SetNull)
+
+  placedAt    DateTime  @default(now())
+  confirmedAt DateTime?
+  readyAt     DateTime?
+  deliveredAt DateTime?
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items      OrderItem[]
+  history    OrderStatusHistory[]
+  redemption CouponRedemption?
+
+  @@index([status, placedAt])
+  @@index([customerId])
+  @@index([placedAt])
+  @@index([phone])
+  @@index([courierId, status])
+  @@index([paymentMethodId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id String @id @default(cuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Nullable so deleting a product never destroys order history.
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // --- Snapshot ----------------------------------------------------------
+  name               String
+  unitPrice          Int
+  quantity           Int
+  /// (unitPrice + modifiers) * quantity
+  lineTotal          Int
+  notes              String?
+  /// Ingredients the customer asked to remove, stored as plain names.
+  removedIngredients String[] @default([])
+
+  createdAt DateTime @default(now())
+
+  variants OrderItemVariant[]
+  extras   OrderItemExtra[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model OrderItemVariant {
+  id String @id @default(cuid())
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  optionId String?
+  option   VariantOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  groupName  String
+  optionName String
+  priceDelta Int    @default(0)
+
+  @@index([orderItemId])
+  @@map("order_item_variants")
+}
+
+model OrderItemExtra {
+  id String @id @default(cuid())
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  extraId String?
+  extra   Extra?  @relation(fields: [extraId], references: [id], onDelete: SetNull)
+
+  name      String
+  unitPrice Int
+  quantity  Int    @default(1)
+
+  @@index([orderItemId])
+  @@map("order_item_extras")
+}
+
+model OrderStatusHistory {
+  id String @id @default(cuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  note       String?
+
+  changedById String?
+  changedBy   User?   @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+// ===========================================================================
+//  Operations & configuration
+// ===========================================================================
+
+model PaymentMethod {
+  id             String            @id @default(cuid())
+  code           PaymentMethodCode @unique
+  name           String
+  description    String?
+  /// Cash requires the "pays with / change" flow at checkout.
+  requiresChange Boolean           @default(false)
+  /// Bank details or instructions shown after selecting the method.
+  instructions   String?
+  isActive       Boolean           @default(true)
+  sortOrder      Int               @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([isActive, sortOrder])
+  @@map("payment_methods")
+}
+
+model BusinessHour {
+  id        String  @id @default(cuid())
+  /// 0 = Sunday … 6 = Saturday (matches `Date#getDay`).
+  dayOfWeek Int     @unique
+  isClosed  Boolean @default(false)
+  /// Minutes from midnight, so comparisons stay integer-only.
+  opensAt   Int     @default(720)
+  closesAt  Int     @default(1380)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("business_hours")
+}
+
+model Banner {
+  id          String          @id @default(cuid())
+  title       String
+  subtitle    String?
+  image       String
+  mobileImage String?
+  ctaLabel    String?
+  ctaHref     String?
+  placement   BannerPlacement @default(HERO)
+  isActive    Boolean         @default(true)
+  sortOrder   Int             @default(0)
+  startsAt    DateTime?
+  endsAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([placement, isActive, sortOrder])
+  @@map("banners")
+}
+
+/// Single-row table holding restaurant-wide configuration.
+model RestaurantSettings {
+  id String @id @default("singleton")
+
+  name        String  @default("Casa Origen")
+  tagline     String?
+  description String?
+  logo        String?
+  favicon     String?
+
+  email    String?
+  phone    String?
+  whatsapp String?
+  address  String?
+
+  instagramUrl String?
+  facebookUrl  String?
+
+  /// Master switch: when false the storefront accepts no new orders.
+  acceptingOrders Boolean @default(true)
+  closedMessage   String?
+
+  /// Baseline delivery fee used when a commune has none of its own.
+  defaultDeliveryFee Int @default(0)
+  /// Cart subtotal above which delivery is free; 0 disables the rule.
+  freeDeliveryFrom   Int @default(0)
+  minOrderAmount     Int @default(0)
+  defaultPrepMinutes Int @default(30)
+  deliveryEtaMinutes Int @default(45)
+  pickupEtaMinutes   Int @default(20)
+
+  /// Percentage points, applied at the very end of the totals pipeline.
+  taxRate     Int     @default(0)
+  taxIncluded Boolean @default(true)
+
+  seoTitle       String?
+  seoDescription String?
+  seoImage       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("restaurant_settings")
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  action   AuditAction
+  entity   String
+  entityId String?
+  summary  String?
+  /// Full before/after payloads for forensic diffing.
+  before   Json?
+  after    Json?
+
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// Persistent counter used to generate short, human-readable order codes
+/// without relying on a database sequence the app cannot introspect.
+model Counter {
+  key   String @id
+  value Int    @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("counters")
+}
