@@ -23,107 +23,7 @@ CREATE TYPE "DiscountType" AS ENUM ('PERCENTAGE', 'FIXED');
 CREATE TYPE "PromotionScope" AS ENUM ('ALL', 'CATEGORY', 'PRODUCT');
 
 -- CreateEnum
-CREATE TYPE "AuditAction" AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'STATUS_CHANGE', 'EXPORT');
-
--- CreateEnum
 CREATE TYPE "BannerPlacement" AS ENUM ('HERO', 'MENU_TOP', 'SIDEBAR', 'CHECKOUT');
-
--- CreateTable
-CREATE TABLE "users" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "emailVerified" BOOLEAN NOT NULL DEFAULT false,
-    "image" TEXT,
-    "phone" TEXT,
-    "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "lastLoginAt" TIMESTAMP(3),
-    "roleId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "sessions" (
-    "id" TEXT NOT NULL,
-    "token" TEXT NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "ipAddress" TEXT,
-    "userAgent" TEXT,
-    "userId" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "accounts" (
-    "id" TEXT NOT NULL,
-    "accountId" TEXT NOT NULL,
-    "providerId" TEXT NOT NULL,
-    "accessToken" TEXT,
-    "refreshToken" TEXT,
-    "idToken" TEXT,
-    "accessTokenExpiresAt" TIMESTAMP(3),
-    "refreshTokenExpiresAt" TIMESTAMP(3),
-    "scope" TEXT,
-    "password" TEXT,
-    "userId" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "accounts_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "verifications" (
-    "id" TEXT NOT NULL,
-    "identifier" TEXT NOT NULL,
-    "value" TEXT NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "verifications_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "roles" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "description" TEXT,
-    "isSystem" BOOLEAN NOT NULL DEFAULT false,
-    "level" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "roles_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "permissions" (
-    "id" TEXT NOT NULL,
-    "key" TEXT NOT NULL,
-    "resource" TEXT NOT NULL,
-    "action" TEXT NOT NULL,
-    "description" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "permissions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "role_permissions" (
-    "roleId" TEXT NOT NULL,
-    "permissionId" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "role_permissions_pkey" PRIMARY KEY ("roleId","permissionId")
-);
 
 -- CreateTable
 CREATE TABLE "customers" (
@@ -132,7 +32,6 @@ CREATE TABLE "customers" (
     "lastName" TEXT NOT NULL,
     "email" TEXT,
     "phone" TEXT NOT NULL,
-    "userId" TEXT,
     "notes" TEXT,
     "isBlocked" BOOLEAN NOT NULL DEFAULT false,
     "orderCount" INTEGER NOT NULL DEFAULT 0,
@@ -429,7 +328,6 @@ CREATE TABLE "orders" (
     "notes" TEXT,
     "cancellationReason" TEXT,
     "estimatedMinutes" INTEGER,
-    "courierId" TEXT,
     "placedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "confirmedAt" TIMESTAMP(3),
     "readyAt" TIMESTAMP(3),
@@ -488,7 +386,6 @@ CREATE TABLE "order_status_history" (
     "fromStatus" "OrderStatus",
     "toStatus" "OrderStatus" NOT NULL,
     "note" TEXT,
-    "changedById" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "order_status_history_pkey" PRIMARY KEY ("id")
@@ -559,6 +456,7 @@ CREATE TABLE "restaurant_settings" (
     "facebookUrl" TEXT,
     "acceptingOrders" BOOLEAN NOT NULL DEFAULT true,
     "closedMessage" TEXT,
+    "deliveryEnabled" BOOLEAN NOT NULL DEFAULT true,
     "defaultDeliveryFee" INTEGER NOT NULL DEFAULT 0,
     "freeDeliveryFrom" INTEGER NOT NULL DEFAULT 0,
     "minOrderAmount" INTEGER NOT NULL DEFAULT 0,
@@ -577,23 +475,6 @@ CREATE TABLE "restaurant_settings" (
 );
 
 -- CreateTable
-CREATE TABLE "audit_logs" (
-    "id" TEXT NOT NULL,
-    "action" "AuditAction" NOT NULL,
-    "entity" TEXT NOT NULL,
-    "entityId" TEXT,
-    "summary" TEXT,
-    "before" JSONB,
-    "after" JSONB,
-    "actorId" TEXT,
-    "ipAddress" TEXT,
-    "userAgent" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "counters" (
     "key" TEXT NOT NULL,
     "value" INTEGER NOT NULL DEFAULT 0,
@@ -601,60 +482,6 @@ CREATE TABLE "counters" (
 
     CONSTRAINT "counters_pkey" PRIMARY KEY ("key")
 );
-
--- CreateIndex
-CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
-
--- CreateIndex
-CREATE INDEX "users_roleId_idx" ON "users"("roleId");
-
--- CreateIndex
-CREATE INDEX "users_isActive_idx" ON "users"("isActive");
-
--- CreateIndex
-CREATE INDEX "users_createdAt_idx" ON "users"("createdAt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "sessions_token_key" ON "sessions"("token");
-
--- CreateIndex
-CREATE INDEX "sessions_userId_idx" ON "sessions"("userId");
-
--- CreateIndex
-CREATE INDEX "sessions_expiresAt_idx" ON "sessions"("expiresAt");
-
--- CreateIndex
-CREATE INDEX "accounts_userId_idx" ON "accounts"("userId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "accounts_providerId_accountId_key" ON "accounts"("providerId", "accountId");
-
--- CreateIndex
-CREATE INDEX "verifications_identifier_idx" ON "verifications"("identifier");
-
--- CreateIndex
-CREATE INDEX "verifications_expiresAt_idx" ON "verifications"("expiresAt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "roles_name_key" ON "roles"("name");
-
--- CreateIndex
-CREATE UNIQUE INDEX "roles_slug_key" ON "roles"("slug");
-
--- CreateIndex
-CREATE INDEX "roles_slug_idx" ON "roles"("slug");
-
--- CreateIndex
-CREATE UNIQUE INDEX "permissions_key_key" ON "permissions"("key");
-
--- CreateIndex
-CREATE INDEX "permissions_resource_idx" ON "permissions"("resource");
-
--- CreateIndex
-CREATE INDEX "role_permissions_permissionId_idx" ON "role_permissions"("permissionId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "customers_userId_key" ON "customers"("userId");
 
 -- CreateIndex
 CREATE INDEX "customers_email_idx" ON "customers"("email");
@@ -804,9 +631,6 @@ CREATE INDEX "orders_placedAt_idx" ON "orders"("placedAt");
 CREATE INDEX "orders_phone_idx" ON "orders"("phone");
 
 -- CreateIndex
-CREATE INDEX "orders_courierId_status_idx" ON "orders"("courierId", "status");
-
--- CreateIndex
 CREATE INDEX "orders_paymentMethodId_idx" ON "orders"("paymentMethodId");
 
 -- CreateIndex
@@ -835,33 +659,6 @@ CREATE UNIQUE INDEX "business_hours_dayOfWeek_key" ON "business_hours"("dayOfWee
 
 -- CreateIndex
 CREATE INDEX "banners_placement_isActive_sortOrder_idx" ON "banners"("placement", "isActive", "sortOrder");
-
--- CreateIndex
-CREATE INDEX "audit_logs_entity_entityId_idx" ON "audit_logs"("entity", "entityId");
-
--- CreateIndex
-CREATE INDEX "audit_logs_actorId_createdAt_idx" ON "audit_logs"("actorId", "createdAt");
-
--- CreateIndex
-CREATE INDEX "audit_logs_createdAt_idx" ON "audit_logs"("createdAt");
-
--- AddForeignKey
-ALTER TABLE "users" ADD CONSTRAINT "users_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "roles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "accounts" ADD CONSTRAINT "accounts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_permissionId_fkey" FOREIGN KEY ("permissionId") REFERENCES "permissions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "customers" ADD CONSTRAINT "customers_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "customer_addresses" ADD CONSTRAINT "customer_addresses_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -936,9 +733,6 @@ ALTER TABLE "orders" ADD CONSTRAINT "orders_couponId_fkey" FOREIGN KEY ("couponI
 ALTER TABLE "orders" ADD CONSTRAINT "orders_promotionId_fkey" FOREIGN KEY ("promotionId") REFERENCES "promotions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "orders" ADD CONSTRAINT "orders_courierId_fkey" FOREIGN KEY ("courierId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -958,9 +752,3 @@ ALTER TABLE "order_item_extras" ADD CONSTRAINT "order_item_extras_extraId_fkey" 
 
 -- AddForeignKey
 ALTER TABLE "order_status_history" ADD CONSTRAINT "order_status_history_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "order_status_history" ADD CONSTRAINT "order_status_history_changedById_fkey" FOREIGN KEY ("changedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;

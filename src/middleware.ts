@@ -1,50 +1,29 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSessionCookie } from 'better-auth/cookies';
 
 /**
- * Edge-side route gate.
+ * Edge-side route gate for /admin.
  *
- * This is an *optimistic* check: it only asks whether a session cookie is
- * present, which is cheap and requires no database access. Authorisation
- * proper (role, permissions, active flag) is enforced again in every layout
- * and Server Action through `requirePermission`.
+ * Optimistic check only: it confirms the admin cookie value matches, which
+ * is cheap and needs no database access. There is no per-user session — the
+ * cookie holds the shared password itself (see `src/lib/auth/admin-session.ts`).
  */
-const PROTECTED_PREFIXES = ['/admin', '/cuenta'] as const;
-const AUTH_ROUTES = ['/ingresar', '/registro'] as const;
-
 export function middleware(request: NextRequest) {
-  const { pathname, search } = request.nextUrl;
+  const { pathname } = request.nextUrl;
 
-  const sessionCookie = getSessionCookie(request, {
-    cookiePrefix: 'casa-origen',
-  });
-  const isAuthenticated = Boolean(sessionCookie);
+  if (pathname === '/admin') return NextResponse.next();
 
-  const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  if (pathname.startsWith('/admin')) {
+    const cookie = request.cookies.get('admin_session')?.value;
+    const isAuthenticated = Boolean(cookie) && cookie === process.env.ADMIN_PASSWORD;
 
-  if (isProtected && !isAuthenticated) {
-    const loginUrl = new URL('/ingresar', request.url);
-    loginUrl.searchParams.set('redirectTo', `${pathname}${search}`);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
-
-  if (isAuthRoute && isAuthenticated) {
-    return NextResponse.redirect(new URL('/', request.url));
+    if (!isAuthenticated) {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Everything except Next.js internals, the auth API (which manages its own
-     * cookies) and static assets.
-     */
-    '/((?!api/auth|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/|uploads/|.*\\.(?:png|jpg|jpeg|gif|webp|avif|svg|ico|txt|xml)$).*)',
-  ],
+  matcher: ['/admin/:path*'],
 };

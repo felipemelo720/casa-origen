@@ -39,7 +39,7 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  serverExternalPackages: ['@node-rs/argon2', 'pino', 'pino-pretty'],
+  serverExternalPackages: ['pino', 'pino-pretty'],
 
   images: {
     formats: ['image/avif', 'image/webp'],

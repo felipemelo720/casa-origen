@@ -1,7 +1,6 @@
 'use server';
 
 import { z } from 'zod';
-import { headers } from 'next/headers';
 import { revalidateTag } from 'next/cache';
 
 import { publicAction } from '@/server/actions/action-builder';
@@ -9,32 +8,31 @@ import { checkoutSchema } from '@/schemas/checkout.schema';
 import { cartSchema } from '@/schemas/cart.schema';
 import { placeOrder } from '@/server/services/checkout.service';
 import { priceCart } from '@/server/services/pricing.service';
-import { getClientIp } from '@/lib/security/rate-limit';
-import { communeRepository, paymentMethodRepository } from '@/server/repositories/operations.repository';
+import {
+  communeRepository,
+  paymentMethodRepository,
+  settingsRepository,
+} from '@/server/repositories/operations.repository';
 
-/** Communes + payment methods needed to render the checkout step inside the cart drawer. */
+/** Communes + payment methods + WhatsApp number needed to render checkout in the cart drawer. */
 export const getCheckoutOptionsAction = publicAction(
   { name: 'checkout.getOptions', rateLimit: { limit: 60, windowMs: 60_000 } },
   z.void(),
   async () => {
-    const [communes, paymentMethods] = await Promise.all([
+    const [communes, paymentMethods, settings] = await Promise.all([
       communeRepository.findAllActive(),
       paymentMethodRepository.findAllActive(),
+      settingsRepository.get(),
     ]);
-    return { communes, paymentMethods };
+    return { communes, paymentMethods, whatsapp: settings.whatsapp };
   },
 );
 
 export const placeOrderAction = publicAction(
   { name: 'checkout.placeOrder', rateLimit: { limit: 8, windowMs: 60_000 } },
   checkoutSchema,
-  async (input, { user }) => {
-    const headerList = await headers();
-    const order = await placeOrder(input, {
-      userId: user?.id,
-      ipAddress: await getClientIp(),
-      userAgent: headerList.get('user-agent') ?? undefined,
-    });
+  async (input) => {
+    const order = await placeOrder(input);
 
     revalidateTag('products');
     revalidateTag('orders');

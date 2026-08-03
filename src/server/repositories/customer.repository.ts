@@ -7,9 +7,6 @@ export const customerRepository = {
   async findByPhone(phone: string) {
     return prisma.customer.findUnique({ where: { phone }, include: { addresses: true } });
   },
-  async findByUserId(userId: string) {
-    return prisma.customer.findUnique({ where: { userId }, include: { addresses: true } });
-  },
   async findById(id: string) {
     return prisma.customer.findUnique({ where: { id }, include: { addresses: true } });
   },

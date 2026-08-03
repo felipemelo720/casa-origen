@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { formatMoney } from '@/lib/money';
+import { openWhatsAppOrder } from '@/lib/whatsapp';
 import { estimateLineTotal, toCartItemInput, useCartStore } from '@/features/cart/cart-store';
 import { getCheckoutOptionsAction, placeOrderAction, previewCartTotalsAction } from '@/server/actions/checkout.actions';
 
@@ -161,6 +162,22 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
         }
       }
       return;
+    }
+
+    if (options?.whatsapp) {
+      openWhatsAppOrder(options.whatsapp, lines, {
+        code: result.data.code,
+        firstName: values.firstName,
+        lastName: values.lastName,
+        phone: values.phone,
+        orderType: values.orderType,
+        street: values.street,
+        communeName: communes.find((c) => c.id === values.communeId)?.name,
+        paymentMethodName: selectedPaymentMethod?.name ?? '',
+        cashGiven: selectedPaymentMethod?.requiresChange ? cashGivenAmount : undefined,
+        notes: values.notes,
+        total: result.data.total,
+      });
     }
 
     clearCart();

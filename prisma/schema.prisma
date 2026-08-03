@@ -76,16 +76,6 @@ enum PromotionScope {
   PRODUCT
 }
 
-enum AuditAction {
-  CREATE
-  UPDATE
-  DELETE
-  LOGIN
-  LOGOUT
-  STATUS_CHANGE
-  EXPORT
-}
-
 enum BannerPlacement {
   HERO
   MENU_TOP
@@ -94,147 +84,10 @@ enum BannerPlacement {
 }
 
 // ===========================================================================
-//  Identity & access
-//  The four models below are the contract required by Better Auth. Extra
-//  columns (phone, roleId, isActive) are declared to Better Auth as
-//  `user.additionalFields`.
-// ===========================================================================
-
-model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  phone         String?
-  isActive      Boolean   @default(true)
-  lastLoginAt   DateTime?
-
-  roleId String?
-  role   Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  sessions        Session[]
-  accounts        Account[]
-  customer        Customer?
-  auditLogs       AuditLog[]
-  statusChanges   OrderStatusHistory[]
-  deliveredOrders Order[]              @relation("OrderCourier")
-
-  @@index([roleId])
-  @@index([isActive])
-  @@index([createdAt])
-  @@map("users")
-}
-
-model Session {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  expiresAt DateTime
-  ipAddress String?
-  userAgent String?
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([expiresAt])
-  @@map("sessions")
-}
-
-model Account {
-  id                    String    @id @default(cuid())
-  accountId             String
-  providerId            String
-  accessToken           String?
-  refreshToken          String?
-  idToken               String?
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
-  scope                 String?
-  password              String?
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([providerId, accountId])
-  @@index([userId])
-  @@map("accounts")
-}
-
-model Verification {
-  id         String   @id @default(cuid())
-  identifier String
-  value      String
-  expiresAt  DateTime
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([identifier])
-  @@index([expiresAt])
-  @@map("verifications")
-}
-
-model Role {
-  id          String  @id @default(cuid())
-  name        String  @unique
-  slug        String  @unique
-  description String?
-  /// System roles cannot be renamed or deleted from the admin UI.
-  isSystem    Boolean @default(false)
-  level       Int     @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users       User[]
-  permissions RolePermission[]
-
-  @@index([slug])
-  @@map("roles")
-}
-
-model Permission {
-  id          String  @id @default(cuid())
-  /// Canonical form: `resource:action` (e.g. `product:update`).
-  key         String  @unique
-  resource    String
-  action      String
-  description String?
-
-  createdAt DateTime @default(now())
-
-  roles RolePermission[]
-
-  @@index([resource])
-  @@map("permissions")
-}
-
-model RolePermission {
-  roleId       String
-  permissionId String
-
-  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@id([roleId, permissionId])
-  @@index([permissionId])
-  @@map("role_permissions")
-}
-
-// ===========================================================================
 //  Customers
+//  No accounts, no login — every order is a guest checkout. Admin access is
+//  a single shared password (see src/lib/auth/admin-session.ts), not a user
+//  table.
 // ===========================================================================
 
 model Customer {
@@ -243,10 +96,6 @@ model Customer {
   lastName  String
   email     String?
   phone     String
-
-  /// Set when the customer registered an account; null for guest checkout.
-  userId String? @unique
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   notes      String?
   isBlocked  Boolean @default(false)
@@ -700,9 +549,6 @@ model Order {
   cancellationReason String?
   estimatedMinutes   Int?
 
-  courierId String?
-  courier   User?   @relation("OrderCourier", fields: [courierId], references: [id], onDelete: SetNull)
-
   placedAt    DateTime  @default(now())
   confirmedAt DateTime?
   readyAt     DateTime?
@@ -720,7 +566,6 @@ model Order {
   @@index([customerId])
   @@index([placedAt])
   @@index([phone])
-  @@index([courierId, status])
   @@index([paymentMethodId])
   @@map("orders")
 }
@@ -798,9 +643,6 @@ model OrderStatusHistory {
   fromStatus OrderStatus?
   toStatus   OrderStatus
   note       String?
-
-  changedById String?
-  changedBy   User?   @relation(fields: [changedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
 
@@ -890,6 +732,9 @@ model RestaurantSettings {
   /// Master switch: when false the storefront accepts no new orders.
   acceptingOrders Boolean @default(true)
   closedMessage   String?
+  /// Independent from `acceptingOrders` — lets the admin disable delivery
+  /// (e.g. driver unavailable) while pickup keeps working.
+  deliveryEnabled Boolean @default(true)
 
   /// Baseline delivery fee used when a commune has none of its own.
   defaultDeliveryFee Int @default(0)
@@ -912,31 +757,6 @@ model RestaurantSettings {
   updatedAt DateTime @updatedAt
 
   @@map("restaurant_settings")
-}
-
-model AuditLog {
-  id String @id @default(cuid())
-
-  action   AuditAction
-  entity   String
-  entityId String?
-  summary  String?
-  /// Full before/after payloads for forensic diffing.
-  before   Json?
-  after    Json?
-
-  actorId String?
-  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
-
-  ipAddress String?
-  userAgent String?
-
-  createdAt DateTime @default(now())
-
-  @@index([entity, entityId])
-  @@index([actorId, createdAt])
-  @@index([createdAt])
-  @@map("audit_logs")
 }
 
 /// Persistent counter used to generate short, human-readable order codes

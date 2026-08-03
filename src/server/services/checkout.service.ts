@@ -28,10 +28,7 @@ function buildOrderCode(sequence: number): string {
  * "most sold" counter — happens on the same `tx` handle, so a failure at any
  * step rolls back the entire order instead of leaving partial state.
  */
-export async function placeOrder(
-  input: CheckoutInput,
-  context: { userId?: string; ipAddress?: string; userAgent?: string },
-) {
+export async function placeOrder(input: CheckoutInput) {
   const open = await getOpenState();
   if (!open.isOpen) {
     throw new BusinessRuleError(open.reason ?? 'No estamos aceptando pedidos en este momento.');
@@ -79,7 +76,6 @@ export async function placeOrder(
       lastName,
       phone,
       email,
-      ...(context.userId ? { user: { connect: { id: context.userId } } } : {}),
     });
 
     const settings = await settingsRepository.get();

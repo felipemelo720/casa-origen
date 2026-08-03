@@ -5,19 +5,13 @@ import type { z } from 'zod';
 import { createLogger } from '@/lib/logger';
 import { failFrom, ok, type ActionResult } from '@/lib/result';
 import { ValidationError } from '@/lib/errors';
+import { ForbiddenError } from '@/lib/errors';
 import { enforceRateLimit } from '@/lib/security/rate-limit';
-import { requirePermission, requireUser, type SessionUser } from '@/lib/auth/session';
-import type { PermissionKey } from '@/constants/permissions';
+import { isAdminAuthenticated } from '@/lib/auth/admin-session';
 
 const log = createLogger('action');
 
-export type ActionContext = {
-  user: SessionUser | null;
-};
-
-export type AuthenticatedActionContext = {
-  user: SessionUser;
-};
+export type ActionContext = Record<string, never>;
 
 type BaseOptions = {
   /** Used for logging and as the rate-limit bucket name. */
@@ -87,28 +81,22 @@ export function publicAction<TInput, TOutput>(
   schema: z.ZodType<TInput>,
   handler: (input: TInput, context: ActionContext) => Promise<TOutput>,
 ) {
-  return run(options, schema, async () => ({ user: null }) as ActionContext, handler);
+  return run(options, schema, async () => ({}) as ActionContext, handler);
 }
 
-/** Requires an authenticated, active user. */
-export function authedAction<TInput, TOutput>(
+/** Requires the admin cookie (single shared password). */
+export function adminAction<TInput, TOutput>(
   options: BaseOptions,
   schema: z.ZodType<TInput>,
-  handler: (input: TInput, context: AuthenticatedActionContext) => Promise<TOutput>,
-) {
-  return run(options, schema, async () => ({ user: await requireUser() }), handler);
-}
-
-/** Requires an authenticated user holding every listed permission. */
-export function permissionAction<TInput, TOutput>(
-  options: BaseOptions & { permissions: PermissionKey[] },
-  schema: z.ZodType<TInput>,
-  handler: (input: TInput, context: AuthenticatedActionContext) => Promise<TOutput>,
+  handler: (input: TInput, context: ActionContext) => Promise<TOutput>,
 ) {
   return run(
     options,
     schema,
-    async () => ({ user: await requirePermission(...options.permissions) }),
+    async () => {
+      if (!(await isAdminAuthenticated())) throw new ForbiddenError();
+      return {} as ActionContext;
+    },
     handler,
   );
 }

@@ -52,11 +52,8 @@ export function StorefrontFooter({
 
         <div className="space-y-2 text-sm">
           <p className="font-medium">Enlaces</p>
-          <Link href="/menu" className="text-muted-foreground hover:text-primary block">
+          <Link href="#menu" className="text-muted-foreground hover:text-primary block">
             Menú
-          </Link>
-          <Link href="/pedido" className="text-muted-foreground hover:text-primary block">
-            Seguir mi pedido
           </Link>
         </div>
       </div>

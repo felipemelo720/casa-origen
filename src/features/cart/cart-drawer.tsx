@@ -1,9 +1,8 @@
 'use client';
 
 import Image from 'next/image';
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 
 import {
@@ -21,7 +20,6 @@ import { estimateLineTotal, useCartStore } from '@/features/cart/cart-store';
 import { CheckoutForm } from '@/features/checkout/checkout-form';
 
 export function CartDrawer() {
-  const router = useRouter();
   const isOpen = useCartStore((state) => state.isOpen);
   const close = useCartStore((state) => state.close);
   const lines = useCartStore((state) => state.lines);
@@ -43,7 +41,7 @@ export function CartDrawer() {
 
   function handlePlaced(code: string) {
     close();
-    router.push(`/pedido/${code}`);
+    toast.success(`Pedido ${code} enviado por WhatsApp.`);
   }
 
   return (
@@ -60,8 +58,8 @@ export function CartDrawer() {
           <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
             <ShoppingBag className="size-10 opacity-40" />
             <p>Tu carrito está vacío.</p>
-            <Button variant="outline" asChild onClick={close}>
-              <Link href="/menu">Ver el menú</Link>
+            <Button variant="outline" onClick={close}>
+              Ver el menú
             </Button>
           </div>
         ) : step === 'checkout' ? (

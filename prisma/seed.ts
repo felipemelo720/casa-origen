@@ -6,27 +6,8 @@
  * labels) without duplicating catalogue data.
  */
 import { PrismaClient, PaymentMethodCode, BannerPlacement } from '@prisma/client';
-import { hash } from '@node-rs/argon2';
-
-import {
-  ALL_PERMISSIONS,
-  DEFAULT_ROLE_PERMISSIONS,
-  ROLE_LABELS,
-  ROLE_LEVELS,
-  ROLE_SLUGS,
-  type RoleSlug,
-} from '../src/constants/permissions';
 
 const prisma = new PrismaClient();
-
-// algorithm: 2 = Argon2id (see src/lib/auth/password.ts for the rationale)
-const ARGON2_OPTIONS = {
-  algorithm: 2,
-  memoryCost: 19_456,
-  timeCost: 2,
-  parallelism: 1,
-  outputLen: 32,
-} as const;
 
 function slugify(value: string): string {
   return value
@@ -36,99 +17,6 @@ function slugify(value: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-}
-
-async function seedPermissions() {
-  await prisma.permission.createMany({
-    data: ALL_PERMISSIONS.map((key) => {
-      const [resource = '', action = ''] = key.split(':');
-      return {
-        key,
-        resource,
-        action,
-        description: `Permite ${action} sobre ${resource}`,
-      };
-    }),
-    skipDuplicates: true,
-  });
-
-  const permissions = await prisma.permission.findMany({
-    select: { id: true, key: true },
-  });
-
-  return new Map(permissions.map((item) => [item.key, item.id]));
-}
-
-async function seedRoles(permissionIds: Map<string, string>) {
-  const roleIds = new Map<RoleSlug, string>();
-
-  for (const slug of Object.values(ROLE_SLUGS)) {
-    const role = await prisma.role.upsert({
-      where: { slug },
-      update: {
-        name: ROLE_LABELS[slug],
-        level: ROLE_LEVELS[slug],
-        isSystem: true,
-      },
-      create: {
-        slug,
-        name: ROLE_LABELS[slug],
-        level: ROLE_LEVELS[slug],
-        isSystem: true,
-        description: `Rol del sistema: ${ROLE_LABELS[slug]}`,
-      },
-      select: { id: true },
-    });
-
-    roleIds.set(slug, role.id);
-
-    const grants = DEFAULT_ROLE_PERMISSIONS[slug]
-      .map((key) => permissionIds.get(key))
-      .filter((id): id is string => Boolean(id))
-      .map((permissionId) => ({ roleId: role.id, permissionId }));
-
-    if (grants.length > 0) {
-      await prisma.rolePermission.createMany({
-        data: grants,
-        skipDuplicates: true,
-      });
-    }
-  }
-
-  return roleIds;
-}
-
-async function seedAdmin(adminRoleId: string) {
-  const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@casaorigen.cl').toLowerCase();
-  const password = process.env.SEED_ADMIN_PASSWORD ?? 'Admin123!Change';
-  const digest = await hash(password, ARGON2_OPTIONS);
-
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: { roleId: adminRoleId, isActive: true },
-    create: {
-      email,
-      name: 'Administrador',
-      emailVerified: true,
-      isActive: true,
-      roleId: adminRoleId,
-    },
-    select: { id: true },
-  });
-
-  // Better Auth stores credentials in `accounts` with providerId "credential".
-  await prisma.account.upsert({
-    where: { providerId_accountId: { providerId: 'credential', accountId: user.id } },
-    update: { password: digest },
-    create: {
-      providerId: 'credential',
-      accountId: user.id,
-      userId: user.id,
-      password: digest,
-    },
-  });
-
-  return email;
 }
 
 async function seedSettings() {
@@ -593,7 +481,7 @@ async function seedBanners() {
       image:
         'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=2000&q=80',
       ctaLabel: 'Ver el menú',
-      ctaHref: '/menu',
+      ctaHref: '/#menu',
       placement: BannerPlacement.HERO,
       sortOrder: 0,
     },
@@ -603,7 +491,7 @@ async function seedBanners() {
       image:
         'https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=2000&q=80',
       ctaLabel: 'Pedir ahora',
-      ctaHref: '/menu',
+      ctaHref: '/#menu',
       placement: BannerPlacement.MENU_TOP,
       sortOrder: 0,
     },
@@ -676,16 +564,6 @@ async function seedPromotionsAndCoupons() {
 }
 
 async function main() {
-  console.log('▸ Seeding permissions and roles…');
-  const permissionIds = await seedPermissions();
-  const roleIds = await seedRoles(permissionIds);
-
-  const adminRoleId = roleIds.get(ROLE_SLUGS.ADMIN);
-  if (!adminRoleId) throw new Error('Administrator role was not created');
-
-  console.log('▸ Seeding administrator…');
-  const adminEmail = await seedAdmin(adminRoleId);
-
   console.log('▸ Seeding configuration…');
   await Promise.all([seedSettings(), seedPaymentMethods(), seedBusinessHours()]);
 
@@ -706,9 +584,7 @@ async function main() {
     prisma.category.count(),
   ]);
 
-  console.log(
-    `\n✔ Seed complete — ${categories} categories, ${products} products.\n  Admin: ${adminEmail}`,
-  );
+  console.log(`\n✔ Seed complete — ${categories} categories, ${products} products.`);
 }
 
 main()

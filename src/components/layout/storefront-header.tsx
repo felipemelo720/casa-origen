@@ -12,8 +12,7 @@ import { cn } from '@/lib/utils';
 
 const NAV_LINKS = [
   { href: '/', label: 'Inicio' },
-  { href: '/menu', label: 'Menú' },
-  { href: '/pedido', label: 'Mi pedido' },
+  { href: '#menu', label: 'Menú' },
 ];
 
 export function StorefrontHeader({ restaurantName }: { restaurantName: string }) {
