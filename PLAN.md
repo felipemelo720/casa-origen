@@ -69,6 +69,27 @@ commit `b78a0f6`.
   `minutesToLocalTime` en `schedule.service.ts`; sobrevive el local, que
   es su único consumidor y envuelve en 24h en vez de recortar.
 
+### Secciones de venta en la landing (2026-08-03)
+Tres bloques nuevos sobre el menú, que se mantiene igual:
+- **Los más pedidos** — `productRepository.findTopSellers(4)` ordenado por
+  `soldCount` (índice ya existía; lo incrementa `placeOrder`). Filtra
+  `soldCount > 0`, así que la sección no aparece hasta que haya pedidos
+  reales en vez de mostrar una lista arbitraria.
+- **Cupón público** — `Coupon.isPublic` nuevo (migración
+  `coupon_is_public`) + `couponRepository.findPublicActive()`, que valida
+  vigencia y tope de usos. Sin ese campo la sección habría filtrado
+  cupones privados. Solo `BIENVENIDA10` va marcado público;
+  `ENVIOGRATIS` sigue canjeable en el checkout pero no se publica.
+  `CouponBanner` copia el código y lo deja aplicado vía `setCoupon()`.
+- **¿Llegamos a ti?** — `DeliveryChecker` con las 10 localidades de Paine
+  (`Paine Centro`, `Huelquén`, `Champa`, `Hospital`, `Viluco`, `Chada`,
+  `Valdivia de Paine`, `Águila Sur`, `Águila Norte`, `Angostura`).
+  Muestra despacho, ETA y pedido mínimo antes de armar el carrito. Con
+  `deliveryEnabled` apagado cae a "solo retiro en tienda".
+
+Las comunas viejas de Santiago quedan `isActive: false`, no borradas:
+pedidos históricos las referencian.
+
 ### Falta
 1. QA manual en navegador (lo hace Felipe): agregar pizza con tamaño →
    carrito → checkout → confirmar pedido en Postgres + WhatsApp se abre

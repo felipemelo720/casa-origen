@@ -63,14 +63,14 @@ export function CartDrawer() {
             </Button>
           </div>
         ) : step === 'checkout' ? (
-          <ScrollArea className="flex-1 px-4">
+          <ScrollArea className="min-h-0 flex-1 px-4">
             <div className="pb-6">
               <CheckoutForm onBack={() => setStep('cart')} onPlaced={handlePlaced} />
             </div>
           </ScrollArea>
         ) : (
           <>
-            <ScrollArea className="flex-1 px-4">
+            <ScrollArea className="min-h-0 flex-1 px-4">
               <ul className="divide-border divide-y">
                 {lines.map((line) => (
                   <li key={line.cartItemId} className="flex gap-3 py-4">

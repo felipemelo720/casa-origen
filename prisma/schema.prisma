@@ -469,6 +469,9 @@ model Coupon {
   /// When true the coupon also zeroes the delivery fee.
   freeDelivery     Boolean      @default(false)
   isActive         Boolean      @default(true)
+  /// When true the code is advertised on the storefront. Private codes stay
+  /// redeemable at checkout but are never listed.
+  isPublic         Boolean      @default(false)
   startsAt         DateTime
   endsAt           DateTime?
 

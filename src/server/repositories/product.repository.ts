@@ -33,6 +33,20 @@ export const productRepository = {
     });
   },
 
+  /**
+   * Best sellers for the landing strip, ranked by the running `soldCount` that
+   * `incrementProductSoldCount` maintains. Products nobody has ordered yet are
+   * excluded so a fresh install shows nothing instead of an arbitrary list.
+   */
+  async findTopSellers(limit: number): Promise<ProductDetail[]> {
+    return prisma.product.findMany({
+      where: { isActive: true, isVisible: true, soldCount: { gt: 0 } },
+      include: productDetailInclude,
+      orderBy: [{ soldCount: 'desc' }, { sortOrder: 'asc' }],
+      take: limit,
+    });
+  },
+
   /** Minimal shape needed by the pricing engine — avoids over-fetching. */
   async findForPricing(id: string) {
     return prisma.product.findUnique({

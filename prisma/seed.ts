@@ -110,24 +110,44 @@ async function seedBusinessHours() {
 }
 
 async function seedCommunes() {
+  // Localities served inside the comuna of Paine, ordered from the town centre
+  // outwards — the fee and the extra minutes both track that distance.
   const communes = [
-    { name: 'Providencia', deliveryFee: 2500, minOrder: 8000, extraMinutes: 0 },
-    { name: 'Ñuñoa', deliveryFee: 2900, minOrder: 8000, extraMinutes: 5 },
-    { name: 'Las Condes', deliveryFee: 3900, minOrder: 12000, extraMinutes: 10 },
-    { name: 'Santiago Centro', deliveryFee: 2900, minOrder: 8000, extraMinutes: 5 },
-    { name: 'La Reina', deliveryFee: 3900, minOrder: 12000, extraMinutes: 12 },
-    { name: 'Macul', deliveryFee: 3200, minOrder: 10000, extraMinutes: 8 },
-    { name: 'Vitacura', deliveryFee: 4500, minOrder: 15000, extraMinutes: 15 },
-    { name: 'San Miguel', deliveryFee: 3500, minOrder: 10000, extraMinutes: 12 },
+    { name: 'Paine Centro', deliveryFee: 1500, minOrder: 8000, extraMinutes: 0 },
+    { name: 'Huelquén', deliveryFee: 2500, minOrder: 10000, extraMinutes: 10 },
+    { name: 'Champa', deliveryFee: 2500, minOrder: 10000, extraMinutes: 10 },
+    { name: 'Hospital', deliveryFee: 2800, minOrder: 10000, extraMinutes: 12 },
+    { name: 'Viluco', deliveryFee: 2200, minOrder: 9000, extraMinutes: 8 },
+    { name: 'Chada', deliveryFee: 3200, minOrder: 12000, extraMinutes: 18 },
+    { name: 'Valdivia de Paine', deliveryFee: 2800, minOrder: 10000, extraMinutes: 12 },
+    { name: 'Águila Sur', deliveryFee: 3000, minOrder: 12000, extraMinutes: 15 },
+    { name: 'Águila Norte', deliveryFee: 3000, minOrder: 12000, extraMinutes: 15 },
+    { name: 'Angostura', deliveryFee: 3500, minOrder: 12000, extraMinutes: 20 },
   ];
 
+  const slugs = communes.map((commune) => slugify(commune.name));
+
   for (const [index, commune] of communes.entries()) {
+    const slug = slugify(commune.name);
     await prisma.commune.upsert({
-      where: { slug: slugify(commune.name) },
-      update: { deliveryFee: commune.deliveryFee, minOrder: commune.minOrder },
-      create: { ...commune, slug: slugify(commune.name), sortOrder: index },
+      where: { slug },
+      update: {
+        deliveryFee: commune.deliveryFee,
+        minOrder: commune.minOrder,
+        extraMinutes: commune.extraMinutes,
+        sortOrder: index,
+        isActive: true,
+      },
+      create: { ...commune, slug, sortOrder: index },
     });
   }
+
+  // Retire anything seeded previously. Past orders point at these rows, so they
+  // are deactivated rather than deleted.
+  await prisma.commune.updateMany({
+    where: { slug: { notIn: slugs } },
+    data: { isActive: false },
+  });
 }
 
 async function seedTagsAndIngredients() {
@@ -514,7 +534,7 @@ async function seedBanners() {
 async function seedPromotionsAndCoupons() {
   await prisma.coupon.upsert({
     where: { code: 'BIENVENIDA10' },
-    update: {},
+    update: { isPublic: true },
     create: {
       code: 'BIENVENIDA10',
       description: '10% de descuento en tu primer pedido',
@@ -525,6 +545,8 @@ async function seedPromotionsAndCoupons() {
       perCustomerLimit: 1,
       startsAt: new Date(),
       isActive: true,
+      // The one code advertised on the landing page.
+      isPublic: true,
     },
   });
 

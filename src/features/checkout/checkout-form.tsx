@@ -10,7 +10,6 @@ import { ChevronLeft, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
@@ -194,18 +193,27 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
     onPlaced(result.data.code);
   }
 
+  /** One compact error line per section instead of a label + message per field. */
+  function firstErrorOf(...fields: (keyof FormValues)[]): string | undefined {
+    for (const field of fields) {
+      const message = form.formState.errors[field]?.message;
+      if (message) return String(message);
+    }
+    return undefined;
+  }
+
   function applyCoupon() {
     setCoupon(couponInput.trim() || undefined);
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-      <Button type="button" variant="ghost" size="sm" onClick={onBack} className="-ml-2">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+      <Button type="button" variant="ghost" size="sm" onClick={onBack} className="-ml-2 h-7">
         <ChevronLeft className="size-4" />
         Volver al carrito
       </Button>
 
-      <section className="space-y-3">
+      <section className="space-y-2">
         <h3 className="font-display text-sm font-semibold">Tipo de entrega</h3>
         <RadioGroup
           value={watchedOrderType}
@@ -230,54 +238,27 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
         )}
       </section>
 
-      <section className="space-y-3">
+      <section className="space-y-2">
         <h3 className="font-display text-sm font-semibold">Tus datos</h3>
-        <div className="space-y-1.5">
-          <Label htmlFor="firstName">Nombre</Label>
-          <Input id="firstName" {...form.register('firstName')} />
-          {form.formState.errors.firstName && (
-            <p className="text-destructive text-sm">{form.formState.errors.firstName.message}</p>
-          )}
+        <div className="grid grid-cols-2 gap-2">
+          <Input placeholder="Nombre" aria-label="Nombre" {...form.register('firstName')} />
+          <Input placeholder="Apellido" aria-label="Apellido" {...form.register('lastName')} />
+          <Input placeholder="+56 9 1234 5678" aria-label="Teléfono" {...form.register('phone')} />
+          <Input type="email" placeholder="Correo (opcional)" aria-label="Correo" {...form.register('email')} />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="lastName">Apellido</Label>
-          <Input id="lastName" {...form.register('lastName')} />
-          {form.formState.errors.lastName && (
-            <p className="text-destructive text-sm">{form.formState.errors.lastName.message}</p>
-          )}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="phone">Teléfono</Label>
-          <Input id="phone" placeholder="+56 9 1234 5678" {...form.register('phone')} />
-          {form.formState.errors.phone && (
-            <p className="text-destructive text-sm">{form.formState.errors.phone.message}</p>
-          )}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="email">Correo (opcional)</Label>
-          <Input id="email" type="email" {...form.register('email')} />
-          {form.formState.errors.email && (
-            <p className="text-destructive text-sm">{form.formState.errors.email.message}</p>
-          )}
-        </div>
+        {firstErrorOf('firstName', 'lastName', 'phone', 'email') && (
+          <p className="text-destructive text-xs">{firstErrorOf('firstName', 'lastName', 'phone', 'email')}</p>
+        )}
       </section>
 
       {watchedOrderType === 'DELIVERY' && (
-        <section className="space-y-3">
+        <section className="space-y-2">
           <h3 className="font-display text-sm font-semibold">Dirección de despacho</h3>
-          <div className="space-y-1.5">
-            <Label htmlFor="street">Calle y número</Label>
-            <Input id="street" {...form.register('street')} />
-            {form.formState.errors.street && (
-              <p className="text-destructive text-sm">{form.formState.errors.street.message}</p>
-            )}
+          <div className="grid grid-cols-2 gap-2">
+            <Input placeholder="Calle y número" aria-label="Calle y número" {...form.register('street')} />
+            <Input placeholder="Depto, referencia…" aria-label="Referencia" {...form.register('reference')} />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="reference">Referencia (opcional)</Label>
-            <Input id="reference" placeholder="Depto, color de la casa…" {...form.register('reference')} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Comuna</Label>
+          <div>
             <Select
               value={watchedCommuneId || undefined}
               onValueChange={(value) => form.setValue('communeId', value)}
@@ -294,69 +275,78 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
                 ))}
               </SelectContent>
             </Select>
-            {form.formState.errors.communeId && (
-              <p className="text-destructive text-sm">{form.formState.errors.communeId.message}</p>
-            )}
           </div>
+          {firstErrorOf('street', 'communeId') && (
+            <p className="text-destructive text-xs">{firstErrorOf('street', 'communeId')}</p>
+          )}
         </section>
       )}
 
-      <section className="space-y-3">
+      <section className="space-y-2">
         <h3 className="font-display text-sm font-semibold">Método de pago</h3>
         <RadioGroup
           value={watchedPaymentMethodId}
           onValueChange={(value) => form.setValue('paymentMethodId', value)}
-          className="space-y-2"
+          className="grid grid-cols-2 gap-2"
         >
           {paymentMethods.map((pm) => (
             <label
               key={pm.id}
-              className="border-border has-[[data-state=checked]]:border-primary flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+              title={pm.description ?? undefined}
+              className="border-border has-[[data-state=checked]]:border-primary flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
             >
-              <RadioGroupItem value={pm.id} className="mt-0.5" />
-              <span>
-                <span className="block font-medium">{pm.name}</span>
-                {pm.description && <span className="text-muted-foreground block text-xs">{pm.description}</span>}
-              </span>
+              <RadioGroupItem value={pm.id} />
+              <span className="truncate font-medium">{pm.name}</span>
             </label>
           ))}
         </RadioGroup>
-        {form.formState.errors.paymentMethodId && (
-          <p className="text-destructive text-sm">{form.formState.errors.paymentMethodId.message}</p>
+        {firstErrorOf('paymentMethodId') && (
+          <p className="text-destructive text-xs">{firstErrorOf('paymentMethodId')}</p>
         )}
 
         {selectedPaymentMethod?.requiresChange && (
-          <div className="space-y-1.5 pt-1">
-            <Label htmlFor="cashGiven">¿Con cuánto pagas?</Label>
-            <Input id="cashGiven" inputMode="numeric" placeholder="$" {...form.register('cashGiven')} />
+          <div className="flex items-center gap-2">
+            <Input
+              inputMode="numeric"
+              placeholder="¿Con cuánto pagas?"
+              aria-label="¿Con cuánto pagas?"
+              {...form.register('cashGiven')}
+            />
             {preview && cashGivenAmount > 0 && (
-              <p className="text-muted-foreground text-sm">Vuelto: {formatMoney(changeDue)}</p>
+              <span className="text-muted-foreground shrink-0 text-xs">Vuelto {formatMoney(changeDue)}</span>
             )}
           </div>
         )}
         {selectedPaymentMethod?.instructions && (
-          <p className="text-muted-foreground text-sm">{selectedPaymentMethod.instructions}</p>
+          <p className="text-muted-foreground text-xs">{selectedPaymentMethod.instructions}</p>
         )}
       </section>
 
-      <section className="space-y-2">
-        <h3 className="font-display text-sm font-semibold">Observaciones</h3>
-        <Textarea placeholder="Alguna indicación para tu pedido…" {...form.register('notes')} />
-      </section>
-
-      <Separator />
-
-      <section className="space-y-2">
-        <div className="flex gap-2">
-          <Input placeholder="Código de cupón" value={couponInput} onChange={(e) => setCouponInput(e.target.value)} />
+      <section className="grid grid-cols-2 gap-2">
+        <Textarea
+          rows={2}
+          placeholder="Observaciones…"
+          aria-label="Observaciones"
+          className="min-h-0 resize-none"
+          {...form.register('notes')}
+        />
+        <div className="flex h-fit gap-2">
+          <Input
+            placeholder="Cupón"
+            aria-label="Código de cupón"
+            value={couponInput}
+            onChange={(e) => setCouponInput(e.target.value)}
+          />
           <Button type="button" variant="outline" onClick={applyCoupon}>
             Aplicar
           </Button>
         </div>
+      </section>
 
-        {previewError && <p className="text-destructive text-sm">{previewError}</p>}
+      <section className="space-y-2">
+        {previewError && <p className="text-destructive text-xs">{previewError}</p>}
 
-        <div className="space-y-1.5 text-sm">
+        <div className="space-y-1 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Subtotal</span>
             <span>{formatMoney(preview?.subtotal ?? subtotal)}</span>
