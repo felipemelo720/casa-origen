@@ -55,6 +55,14 @@ commit `b78a0f6`.
   `next.config.ts`, `npm install` corrido (26 paquetes removidos).
 - `npm run build` limpio. Rutas finales: `/` (estática), `/admin`
   (dinámica), `/robots.txt`, `/sitemap.xml`, `/_not-found`.
+- `deliveryEnabled` cableado de punta a punta: `placeOrder` rechaza
+  `orderType: DELIVERY` con delivery apagado, `getCheckoutOptionsAction`
+  expone el flag y `checkout-form` esconde la opción y cae a `PICKUP`
+  (el carrito persiste `orderType` en localStorage, así que puede llegar
+  con DELIVERY ya elegido). Antes el toggle del admin no hacía nada.
+- Más dead code fuera: `catalog-support.repository.ts` completo (0
+  callers), el re-export `timeToMinutes` de `schedule.service.ts` y la
+  función en `lib/utils.ts` que quedó huérfana.
 
 ### Falta
 1. QA manual en navegador (lo hace Felipe): agregar pizza con tamaño →

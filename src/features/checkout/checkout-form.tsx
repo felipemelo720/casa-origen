@@ -76,6 +76,8 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
   const options = optionsQuery.data?.ok ? optionsQuery.data.data : null;
   const communes = options?.communes ?? [];
   const paymentMethods = options?.paymentMethods ?? [];
+  // Assume delivery is on until the settings land, so the option doesn't flicker in.
+  const deliveryEnabled = options?.deliveryEnabled ?? true;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -102,6 +104,14 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
   useEffect(() => {
     setOrderType(watchedOrderType);
   }, [watchedOrderType, setOrderType]);
+
+  // The cart store defaults to DELIVERY and persists, so a customer can land here
+  // with DELIVERY selected after the admin switched it off. Fall back to PICKUP.
+  useEffect(() => {
+    if (!deliveryEnabled && watchedOrderType === 'DELIVERY') {
+      form.setValue('orderType', 'PICKUP');
+    }
+  }, [deliveryEnabled, watchedOrderType, form]);
 
   useEffect(() => {
     setCommune(watchedCommuneId || undefined);
@@ -200,17 +210,24 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
         <RadioGroup
           value={watchedOrderType}
           onValueChange={(v) => form.setValue('orderType', v as 'DELIVERY' | 'PICKUP')}
-          className="grid grid-cols-2 gap-2"
+          className={deliveryEnabled ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}
         >
-          <label className="border-border has-[[data-state=checked]]:border-primary flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-            <RadioGroupItem value="DELIVERY" />
-            Delivery
-          </label>
+          {deliveryEnabled && (
+            <label className="border-border has-[[data-state=checked]]:border-primary flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+              <RadioGroupItem value="DELIVERY" />
+              Delivery
+            </label>
+          )}
           <label className="border-border has-[[data-state=checked]]:border-primary flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
             <RadioGroupItem value="PICKUP" />
             Retiro
           </label>
         </RadioGroup>
+        {!deliveryEnabled && (
+          <p className="text-muted-foreground text-sm">
+            El delivery no está disponible por ahora. Solo retiro en tienda.
+          </p>
+        )}
       </section>
 
       <section className="space-y-3">

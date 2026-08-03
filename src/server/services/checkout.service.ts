@@ -34,6 +34,12 @@ export async function placeOrder(input: CheckoutInput) {
     throw new BusinessRuleError(open.reason ?? 'No estamos aceptando pedidos en este momento.');
   }
 
+  const settings = await settingsRepository.get();
+
+  if (input.orderType === 'DELIVERY' && !settings.deliveryEnabled) {
+    throw new BusinessRuleError('El delivery no está disponible en este momento. Puedes retirar en tienda.');
+  }
+
   const paymentMethod = await paymentMethodRepository.findById(input.paymentMethodId);
   if (!paymentMethod || !paymentMethod.isActive) {
     throw new NotFoundError('El método de pago');
@@ -78,7 +84,6 @@ export async function placeOrder(input: CheckoutInput) {
       email,
     });
 
-    const settings = await settingsRepository.get();
     const estimatedMinutes =
       input.orderType === 'DELIVERY'
         ? settings.deliveryEtaMinutes + (commune?.extraMinutes ?? 0)

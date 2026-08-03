@@ -47,9 +47,3 @@ export function minutesToTime(minutes: number): string {
   const mins = safe % 60;
   return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
 }
-
-/** `HH:mm` → minutes from midnight. */
-export function timeToMinutes(time: string): number {
-  const [hours = '0', mins = '0'] = time.split(':');
-  return clamp(Number(hours) * 60 + Number(mins), 0, 24 * 60);
-}

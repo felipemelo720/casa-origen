@@ -2,7 +2,6 @@ import 'server-only';
 
 import { businessHourRepository } from '@/server/repositories/operations.repository';
 import { settingsRepository } from '@/server/repositories/operations.repository';
-import { timeToMinutes } from '@/lib/utils';
 
 export type OpenState = {
   isOpen: boolean;
@@ -54,6 +53,3 @@ function minutesToLocalTime(minutes: number): string {
   const mins = minutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
 }
-
-/** Re-exported for admin forms that edit hours directly. */
-export { timeToMinutes };

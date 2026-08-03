@@ -14,7 +14,11 @@ import {
   settingsRepository,
 } from '@/server/repositories/operations.repository';
 
-/** Communes + payment methods + WhatsApp number needed to render checkout in the cart drawer. */
+/**
+ * Communes, payment methods, WhatsApp number and the delivery kill switch —
+ * everything the cart drawer needs to render checkout. `deliveryEnabled` only
+ * hides the option in the UI; `placeOrder` re-checks it server-side.
+ */
 export const getCheckoutOptionsAction = publicAction(
   { name: 'checkout.getOptions', rateLimit: { limit: 60, windowMs: 60_000 } },
   z.void(),
@@ -24,7 +28,12 @@ export const getCheckoutOptionsAction = publicAction(
       paymentMethodRepository.findAllActive(),
       settingsRepository.get(),
     ]);
-    return { communes, paymentMethods, whatsapp: settings.whatsapp };
+    return {
+      communes,
+      paymentMethods,
+      whatsapp: settings.whatsapp,
+      deliveryEnabled: settings.deliveryEnabled,
+    };
   },
 );
 
