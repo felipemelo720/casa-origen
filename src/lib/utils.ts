@@ -17,33 +17,3 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 96);
 }
-
-/** Clamps a number into an inclusive range. */
-export function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-/** Removes `undefined` entries so Prisma treats them as "leave unchanged". */
-export function stripUndefined<T extends Record<string, unknown>>(input: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(input).filter(([, value]) => value !== undefined),
-  ) as Partial<T>;
-}
-
-/** Splits a list into chunks of at most `size` items. */
-export function chunk<T>(items: readonly T[], size: number): T[][] {
-  if (size <= 0) throw new RangeError('chunk size must be positive');
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size));
-  }
-  return result;
-}
-
-/** Minutes-from-midnight → `HH:mm`. */
-export function minutesToTime(minutes: number): string {
-  const safe = clamp(Math.trunc(minutes), 0, 24 * 60);
-  const hours = Math.floor(safe / 60);
-  const mins = safe % 60;
-  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-}

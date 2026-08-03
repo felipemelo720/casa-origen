@@ -63,6 +63,11 @@ commit `b78a0f6`.
 - Más dead code fuera: `catalog-support.repository.ts` completo (0
   callers), el re-export `timeToMinutes` de `schedule.service.ts` y la
   función en `lib/utils.ts` que quedó huérfana.
+- `lib/utils.ts` recortado a lo que se usa (`cn`, `slugify`): fuera
+  `clamp`, `stripUndefined`, `chunk` y `minutesToTime`, todos sin
+  callers. `minutesToTime` estaba además duplicado por
+  `minutesToLocalTime` en `schedule.service.ts`; sobrevive el local, que
+  es su único consumidor y envuelve en 24h en vez de recortar.
 
 ### Falta
 1. QA manual en navegador (lo hace Felipe): agregar pizza con tamaño →
