@@ -90,6 +90,14 @@ Tres bloques nuevos sobre el menú, que se mantiene igual:
 Las comunas viejas de Santiago quedan `isActive: false`, no borradas:
 pedidos históricos las referencian.
 
+La landing ahora llama `getOpenState()`, el mismo check que aplica
+`placeOrder`. Antes solo miraba `acceptingOrders` e ignoraba
+`BusinessHour`, así que fuera de horario se veía normal y el cliente
+descubría el rechazo recién en el checkout. El aviso sale en el hero y
+repetido sobre el menú (quien entra por `#menu` no ve el hero), y el CTA
+pasa a "Ver el menú igual". Con `revalidate = 60` el estado puede quedar
+hasta un minuto desfasado.
+
 ### Falta
 1. QA manual en navegador (lo hace Felipe): agregar pizza con tamaño →
    carrito → checkout → confirmar pedido en Postgres + WhatsApp se abre

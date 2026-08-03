@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import type { Metadata } from 'next';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Clock } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ProductCard } from '@/features/catalog/product-card';
@@ -8,6 +8,7 @@ import { CouponBanner } from '@/features/promo/coupon-banner';
 import { DeliveryChecker } from '@/features/delivery/delivery-checker';
 import { productRepository } from '@/server/repositories/product.repository';
 import { couponRepository } from '@/server/repositories/promotion.repository';
+import { getOpenState } from '@/server/services/schedule.service';
 import {
   bannerRepository,
   communeRepository,
@@ -25,13 +26,16 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [settings, heroBanners, products, topSellers, coupon, zones] = await Promise.all([
+  const [settings, heroBanners, products, topSellers, coupon, zones, open] = await Promise.all([
     settingsRepository.get(),
     bannerRepository.findActiveByPlacement('HERO'),
     productRepository.findAllForMenu(),
     productRepository.findTopSellers(4),
     couponRepository.findPublicActive(),
     communeRepository.findAllActive(),
+    // The same check the checkout enforces, so the landing cannot invite an
+    // order that `placeOrder` will refuse a few clicks later.
+    getOpenState(),
   ]);
 
   const hero = heroBanners[0];
@@ -67,15 +71,19 @@ export default async function HomePage() {
               {hero?.subtitle ?? settings.description}
             </p>
           )}
-          {!settings.acceptingOrders && (
-            <p className="animate-fade-up mt-4 max-w-xl text-sm font-medium text-amber-300 [animation-delay:250ms]">
-              {settings.closedMessage ?? 'No estamos aceptando pedidos en este momento.'}
+          {!open.isOpen && (
+            <p className="animate-fade-up mt-4 flex max-w-xl items-center gap-2 rounded-lg bg-amber-400/15 px-3 py-2 text-sm font-medium text-amber-200 [animation-delay:250ms]">
+              <Clock className="size-4 shrink-0" />
+              <span>
+                {open.reason}
+                {open.reopensAt && ` Abrimos a las ${open.reopensAt}.`}
+              </span>
             </p>
           )}
           <div className="animate-fade-up mt-8 flex flex-wrap gap-3 [animation-delay:300ms]">
             <Button size="lg" asChild>
               <a href="#menu">
-                Ver el menú
+                {open.isOpen ? 'Ver el menú' : 'Ver el menú igual'}
                 <ArrowRight className="size-4" />
               </a>
             </Button>
@@ -102,7 +110,20 @@ export default async function HomePage() {
       )}
 
       <section id="menu" className="mx-auto max-w-7xl scroll-mt-16 px-4 py-16 sm:px-6 lg:px-8">
-        <h2 className="font-display mb-6 text-2xl font-bold">Nuestras pizzas</h2>
+        <div className="mb-6 space-y-2">
+          <h2 className="font-display text-2xl font-bold">Nuestras pizzas</h2>
+          {/* Repeated here: anyone jumping straight to #menu never sees the hero. */}
+          {!open.isOpen && (
+            <p className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+              <Clock className="size-4 shrink-0" />
+              <span>
+                {open.reason}
+                {open.reopensAt && ` Abrimos a las ${open.reopensAt}.`} Puedes mirar la carta, pero
+                todavía no recibimos pedidos.
+              </span>
+            </p>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} />
