@@ -278,7 +278,7 @@ const CATALOGUE: CategorySeed[] = [
         description: 'Salsa de tomate, mozzarella, ajo laminado, aceitunas y orégano fresco.',
         price: 9500,
         prepMinutes: 20,
-        image: 'https://images.unsplash.com/photo-1548365328-9f547fb0953b?auto=format&fit=crop&w=1200&q=80',
+        image: 'https://images.unsplash.com/photo-1604068549290-dea0e4a305ca?auto=format&fit=crop&w=1200&q=80',
         tags: ['Vegetariano'],
         ingredients: ['Tomate', 'Queso', 'Aceituna', 'Ajo'],
         extras: PIZZA_EXTRAS,
@@ -364,6 +364,9 @@ async function upsertProduct(
       offerPrice: product.offerPrice ?? null,
       categoryId,
       sortOrder,
+      // Kept in the update branch too: a dead photo URL has to be fixable by
+      // re-running the seed, not only by resetting the database.
+      image: product.image,
     },
     create: {
       slug,
