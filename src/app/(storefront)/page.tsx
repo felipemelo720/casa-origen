@@ -6,9 +6,13 @@ import { Button } from '@/components/ui/button';
 import { ProductCard } from '@/features/catalog/product-card';
 import { CouponBanner } from '@/features/promo/coupon-banner';
 import { DeliveryChecker } from '@/features/delivery/delivery-checker';
+import { HowToOrder } from '@/features/storefront/how-to-order';
+import { OpeningHours } from '@/features/storefront/opening-hours';
+import { RestaurantJsonLd } from '@/features/storefront/restaurant-jsonld';
+import { TrustBar } from '@/features/storefront/trust-bar';
 import { productRepository } from '@/server/repositories/product.repository';
 import { couponRepository } from '@/server/repositories/promotion.repository';
-import { getOpenState } from '@/server/services/schedule.service';
+import { getOpenState, getWeeklySchedule } from '@/server/services/schedule.service';
 import {
   bannerRepository,
   communeRepository,
@@ -26,22 +30,35 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [settings, heroBanners, products, topSellers, coupon, zones, open] = await Promise.all([
-    settingsRepository.get(),
-    bannerRepository.findActiveByPlacement('HERO'),
-    productRepository.findAllForMenu(),
-    productRepository.findTopSellers(4),
-    couponRepository.findPublicActive(),
-    communeRepository.findAllActive(),
-    // The same check the checkout enforces, so the landing cannot invite an
-    // order that `placeOrder` will refuse a few clicks later.
-    getOpenState(),
-  ]);
+  const [settings, heroBanners, products, topSellers, coupon, zones, open, schedule] =
+    await Promise.all([
+      settingsRepository.get(),
+      bannerRepository.findActiveByPlacement('HERO'),
+      productRepository.findAllForMenu(),
+      productRepository.findTopSellers(4),
+      couponRepository.findPublicActive(),
+      communeRepository.findAllActive(),
+      // The same check the checkout enforces, so the landing cannot invite an
+      // order that `placeOrder` will refuse a few clicks later.
+      getOpenState(),
+      getWeeklySchedule(),
+    ]);
 
   const hero = heroBanners[0];
 
   return (
     <div>
+      <RestaurantJsonLd
+        name={settings.name}
+        description={settings.seoDescription ?? settings.description}
+        image={settings.seoImage ?? hero?.image ?? null}
+        phone={settings.phone}
+        address={settings.address}
+        instagramUrl={settings.instagramUrl}
+        facebookUrl={settings.facebookUrl}
+        schedule={schedule}
+      />
+
       <section className="relative flex min-h-[70vh] items-center overflow-hidden">
         <div className="absolute inset-0 -z-10">
           {hero ? (
@@ -91,6 +108,14 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <TrustBar
+        deliveryEnabled={settings.deliveryEnabled}
+        deliveryEtaMinutes={settings.deliveryEtaMinutes}
+        pickupEtaMinutes={settings.pickupEtaMinutes}
+        freeDeliveryFrom={settings.freeDeliveryFrom}
+        minOrderAmount={settings.minOrderAmount}
+      />
+
       {coupon && (
         <section className="mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-8">
           <CouponBanner coupon={coupon} />
@@ -108,6 +133,17 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Above the menu on purpose: coverage, fee and minimum are what decide
+          whether building a cart is worth it at all. */}
+      <section className="mx-auto max-w-3xl px-4 pt-12 sm:px-6 lg:px-8">
+        <DeliveryChecker
+          zones={zones}
+          deliveryEnabled={settings.deliveryEnabled}
+          baseEtaMinutes={settings.deliveryEtaMinutes}
+          pickupEtaMinutes={settings.pickupEtaMinutes}
+        />
+      </section>
 
       <section id="menu" className="mx-auto max-w-7xl scroll-mt-16 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mb-6 space-y-2">
@@ -131,13 +167,10 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-3xl px-4 pb-16 sm:px-6 lg:px-8">
-        <DeliveryChecker
-          zones={zones}
-          deliveryEnabled={settings.deliveryEnabled}
-          baseEtaMinutes={settings.deliveryEtaMinutes}
-          pickupEtaMinutes={settings.pickupEtaMinutes}
-        />
+      <HowToOrder whatsappEnabled={Boolean(settings.whatsapp)} />
+
+      <section className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+        <OpeningHours schedule={schedule} open={open} />
       </section>
     </div>
   );

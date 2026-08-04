@@ -4,6 +4,11 @@ Pedidos de pizza. Next.js 15 App Router + TypeScript + Prisma + Postgres.
 Dos páginas: `/` (landing + carrito + checkout) y `/admin`.
 Plan y estado detallado en `PLAN.md`.
 
+Las secciones de la landing viven en `src/features/storefront/` y son
+server components. El home ensambla el orden en
+`src/app/(storefront)/page.tsx`, con un solo `Promise.all` para todas las
+consultas.
+
 ## Respuestas
 
 Menos de 500 caracteres. Sin preámbulo, sin resumen final.

@@ -9,6 +9,30 @@ export type OpenState = {
   reopensAt?: string;
 };
 
+export type ScheduleDay = {
+  /** 0 = Sunday … 6 = Saturday, matching `Date#getDay`. */
+  dayOfWeek: number;
+  label: string;
+  isClosed: boolean;
+  /** `HH:mm`, already formatted; the minutes stay server-side. */
+  opensAt: string;
+  closesAt: string;
+  isToday: boolean;
+};
+
+const DAY_LABELS = [
+  'Domingo',
+  'Lunes',
+  'Martes',
+  'Miércoles',
+  'Jueves',
+  'Viernes',
+  'Sábado',
+] as const;
+
+/** Monday first: how a customer reads a week, not how `getDay` numbers it. */
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
+
 /**
  * Whether the restaurant can currently accept an order.
  *
@@ -46,6 +70,28 @@ export async function getOpenState(now: Date = new Date()): Promise<OpenState> {
   }
 
   return { isOpen: true };
+}
+
+/**
+ * The full week, ready to render. Days missing from `business_hours` are
+ * reported as closed rather than omitted, so the list always has seven rows.
+ */
+export async function getWeeklySchedule(now: Date = new Date()): Promise<ScheduleDay[]> {
+  const hours = await businessHourRepository.findAll();
+  const today = now.getDay();
+
+  return WEEK_ORDER.map((dayOfWeek) => {
+    const day = hours.find((h) => h.dayOfWeek === dayOfWeek);
+
+    return {
+      dayOfWeek,
+      label: DAY_LABELS[dayOfWeek] ?? '',
+      isClosed: day?.isClosed ?? true,
+      opensAt: minutesToLocalTime(day?.opensAt ?? 0),
+      closesAt: minutesToLocalTime(day?.closesAt ?? 0),
+      isToday: dayOfWeek === today,
+    };
+  });
 }
 
 function minutesToLocalTime(minutes: number): string {

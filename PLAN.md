@@ -98,6 +98,46 @@ repetido sobre el menú (quien entra por `#menu` no ve el hero), y el CTA
 pasa a "Ver el menú igual". Con `revalidate = 60` el estado puede quedar
 hasta un minuto desfasado.
 
+### Home más profesional (2026-08-03)
+Orden final de la landing: hero → trust bar → cupón → más pedidos →
+`DeliveryChecker` → menú → cómo pedir → horarios.
+
+- **`DeliveryChecker` movido sobre `#menu`.** Estaba al final, así que el
+  cliente armaba el carrito y recién después descubría si le llegaba,
+  cuánto costaba el despacho y cuál era el mínimo.
+- **Trust bar** (`features/storefront/trust-bar.tsx`) bajo el hero:
+  `deliveryEtaMinutes`, `pickupEtaMinutes`, `freeDeliveryFrom` y
+  `minOrderAmount`. Todo eso ya estaba en settings pero solo aparecía en
+  el checkout. Los ítems se arman condicionalmente: con `deliveryEnabled`
+  apagado se caen despacho y envío gratis y quedan dos.
+- **Cómo pedir** (`how-to-order.tsx`), tres pasos. Existe porque confirmar
+  el carrito abre WhatsApp, y sin avisarlo antes el cambio de pestaña se
+  lee como un bug justo en el último click. Recibe `whatsappEnabled`: sin
+  `settings.whatsapp` el paso 3 dice "te llamamos" en vez de prometer un
+  WhatsApp que nunca se abre.
+- **Horarios** (`opening-hours.tsx`) + badge abierto/cerrado, alimentados
+  por `getWeeklySchedule()` nuevo en `schedule.service.ts`. Devuelve los 7
+  días con `HH:mm` ya formateado, `isToday`, y la semana partiendo en
+  lunes (`WEEK_ORDER`), no en domingo como `getDay`. Un día que falte en
+  `business_hours` sale como cerrado en vez de desaparecer, así la lista
+  siempre tiene 7 filas. Los minutos crudos no salen del server.
+- **JSON-LD `Restaurant`** (`restaurant-jsonld.tsx`): nombre, teléfono,
+  dirección, redes, `hasMenu` y `openingHoursSpecification` (filtra los
+  días cerrados, schema.org los infiere por ausencia). Reemplaza
+  todo `<` por su escape unicode JSON antes de inyectar el string, para que
+  un `</script>` metido en `description` o `address` desde el admin no pueda
+  cerrar el tag. `seoImage` por fin se usa, con
+  fallback a la imagen del banner del hero.
+
+`tsc --noEmit`, `lint` y `build` limpios (con el dev apagado y `.next`
+borrado antes). `/` sigue estática con `revalidate = 60`, 41.6 kB / 259 kB
+First Load JS. Las cuatro secciones nuevas son server components y no
+suman JS al cliente: el único componente cliente del home sigue siendo
+`DeliveryChecker`.
+
+Con `revalidate = 60` el badge "Abierto ahora" puede ir hasta un minuto
+desfasado, igual que el aviso de cerrado del hero.
+
 ### Falta
 1. QA manual en navegador (lo hace Felipe): agregar pizza con tamaño →
    carrito → checkout → confirmar pedido en Postgres + WhatsApp se abre
@@ -114,6 +154,9 @@ hasta un minuto desfasado.
 ## Infraestructura dev
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros
 proyectos). `npm run dev` / `build` / `npx prisma studio` funcionan.
+
+`package.json` pide `next@^15.1.4` pero el rango ya resuelve a **15.5.22**.
+Si algo se rompe sin que nadie haya tocado el código, mirar ahí primero.
 
 ## Decisiones fijas
 - Dinero: enteros, nunca float/Decimal.
