@@ -1,5 +1,6 @@
 import { estimateLineTotal, type CartLine } from '@/features/cart/cart-store';
 import { formatMoney } from '@/lib/money';
+import { buildWhatsAppUrl } from '@/lib/whatsapp-link';
 
 type OrderSummary = {
   code: string;
@@ -51,7 +52,6 @@ export function openWhatsAppOrder(
   lines: CartLine[],
   order: OrderSummary,
 ): void {
-  const digits = whatsappNumber.replace(/[^\d]/g, '');
   const message = buildWhatsAppMessage(lines, order);
-  window.open(`https://wa.me/${digits}?text=${encodeURIComponent(message)}`, '_blank');
+  window.open(buildWhatsAppUrl(whatsappNumber, message), '_blank');
 }

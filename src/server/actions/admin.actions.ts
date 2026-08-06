@@ -49,3 +49,10 @@ export async function setProductAvailabilityAction(productId: string, available:
   revalidatePath('/admin');
   revalidatePath('/');
 }
+
+export async function setProductFeaturedAction(productId: string, isFeatured: boolean): Promise<void> {
+  await assertAdmin();
+  await productRepository.setFeatured(productId, isFeatured);
+  revalidatePath('/admin');
+  revalidatePath('/');
+}

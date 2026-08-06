@@ -1,5 +1,7 @@
 # Casa Origen
 
+dame outputs y respuestas de menos de 300 caracteres. 
+
 Pedidos de pizza. Next.js 15 App Router + TypeScript + Prisma + Postgres.
 Dos páginas: `/` (landing + carrito + checkout) y `/admin`.
 Plan y estado detallado en `PLAN.md`.
@@ -8,6 +10,12 @@ Las secciones de la landing viven en `src/features/storefront/` y son
 server components. El home ensambla el orden en
 `src/app/(storefront)/page.tsx`, con un solo `Promise.all` para todas las
 consultas.
+
+El rol de diseño y arquitectura (principios, sistema de diseño, contrato de
+capas, definition of done, rúbrica de revisión) se carga solo con este
+archivo, vía import:
+
+@docs/AI-ROLE.md
 
 ## Respuestas
 
@@ -57,8 +65,9 @@ npx tsc --noEmit && npm run lint && npm run build   # dev apagado
 - Los upserts del seed deben repetir en `update` todo campo que se quiera
   poder corregir sin resetear la DB.
 - `noUncheckedIndexedAccess` está activo: indexar un array da `T | undefined`.
-- Imágenes de productos apuntan a Unsplash y se caen sin aviso. Un 404 de
-  imagen también produce `[object Event]`.
+- Las fotos de productos viven en `public/menu/*.jpg`, no en Unsplash. Los
+  banners todavía apuntan afuera y se caen sin aviso: un 404 de imagen produce
+  `[object Event]`.
 - Depurar errores de cliente: Chromium headless con CDP
   (`chromium --headless=new --remote-debugging-port=9333`) y leer
   `Runtime.consoleAPICalled` / `Network.loadingFailed`. El overlay de Next

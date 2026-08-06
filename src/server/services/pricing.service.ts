@@ -96,6 +96,14 @@ async function priceItem(input: CartItemInput): Promise<PricedItem> {
     }
   }
 
+  // The carta charges add-ons by pizza size, not by add-on: $700 on a 24 cm and
+  // $1.000 on a 32 cm, whatever you put on top. So the selected size wins over
+  // the extra's own catalogue price whenever it carries one.
+  const sizeExtraPrice = selectedVariants.reduce<number | null>((price, variant) => {
+    const option = variantsByOption.get(variant.optionId)?.option;
+    return option?.extraPrice ?? price;
+  }, null);
+
   const extrasByProduct = new Map(product.extras.map((entry) => [entry.extraId, entry]));
   const selectedExtras: PricedExtra[] = [];
   for (const requested of input.selectedExtras) {
@@ -107,7 +115,7 @@ async function priceItem(input: CartItemInput): Promise<PricedItem> {
     selectedExtras.push({
       extraId: entry.extra.id,
       name: entry.extra.name,
-      unitPrice: entry.priceOverride ?? entry.extra.price,
+      unitPrice: sizeExtraPrice ?? entry.priceOverride ?? entry.extra.price,
       quantity,
     });
   }

@@ -33,7 +33,7 @@ export function HowToOrder({ whatsappEnabled }: Props) {
   ];
 
   return (
-    <section className="border-border bg-secondary/40 border-y">
+    <section id="como-pedir" className="border-border bg-secondary/40 scroll-mt-28 border-y">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <h2 className="font-display mb-1 text-2xl font-bold">Pedir es así de simple</h2>
         <p className="text-muted-foreground mb-8 text-sm">Tres pasos, menos de un minuto.</p>

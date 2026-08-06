@@ -2,7 +2,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 
-export type CartVariantSelection = { groupId: string; optionId: string; optionName: string; priceDelta: number };
+export type CartVariantSelection = {
+  groupId: string;
+  optionId: string;
+  optionName: string;
+  priceDelta: number;
+  /** Add-on price while this option is picked, so the cart can price a new
+   *  add-on without going back to the catalogue. `null` on lines saved before
+   *  this existed; the drawer then falls back to the extra's own price. */
+  extraPrice?: number | null;
+};
 export type CartExtraSelection = { extraId: string; name: string; unitPrice: number; quantity: number };
 
 export type CartLine = {
@@ -33,6 +42,7 @@ type CartState = {
   addLine: (line: Omit<CartLine, 'cartItemId'>) => void;
   removeLine: (cartItemId: string) => void;
   setQuantity: (cartItemId: string, quantity: number) => void;
+  setLineExtras: (cartItemId: string, extras: CartExtraSelection[]) => void;
   clear: () => void;
 
   setCoupon: (code?: string) => void;
@@ -73,6 +83,11 @@ export const useCartStore = create<CartState>()(
             quantity <= 0
               ? state.lines.filter((l) => l.cartItemId !== cartItemId)
               : state.lines.map((l) => (l.cartItemId === cartItemId ? { ...l, quantity } : l)),
+        })),
+
+      setLineExtras: (cartItemId, extras) =>
+        set((state) => ({
+          lines: state.lines.map((l) => (l.cartItemId === cartItemId ? { ...l, extras } : l)),
         })),
 
       clear: () => set({ lines: [], couponCode: undefined }),

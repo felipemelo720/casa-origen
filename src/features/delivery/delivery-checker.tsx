@@ -16,7 +16,6 @@ export type DeliveryZone = {
   id: string;
   name: string;
   deliveryFee: number;
-  minOrder: number;
   extraMinutes: number;
 };
 
@@ -69,7 +68,9 @@ export function DeliveryChecker({ zones, deliveryEnabled, baseEtaMinutes, pickup
       </Select>
 
       {zone ? (
-        <div className="grid grid-cols-3 gap-3 text-center">
+        // Two tiles, not three: there is no minimum order any more, so the
+        // third one had nothing to say.
+        <div className="grid grid-cols-2 gap-3 text-center">
           <div className="bg-background rounded-xl p-3">
             <Bike className="text-muted-foreground mx-auto size-4" />
             <p className="mt-1 text-sm font-semibold">
@@ -81,12 +82,6 @@ export function DeliveryChecker({ zones, deliveryEnabled, baseEtaMinutes, pickup
             <Clock className="text-muted-foreground mx-auto size-4" />
             <p className="mt-1 text-sm font-semibold">{baseEtaMinutes + zone.extraMinutes} min</p>
             <p className="text-muted-foreground text-[10px] tracking-wide uppercase">Estimado</p>
-          </div>
-          <div className="bg-background rounded-xl p-3">
-            <p className="mt-4 text-sm font-semibold">
-              {zone.minOrder === 0 ? 'Sin mínimo' : formatMoney(zone.minOrder)}
-            </p>
-            <p className="text-muted-foreground text-[10px] tracking-wide uppercase">Pedido mínimo</p>
           </div>
         </div>
       ) : (

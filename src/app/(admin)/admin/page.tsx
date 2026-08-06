@@ -1,5 +1,5 @@
 import { startOfDay, subDays } from 'date-fns';
-import { DollarSign, Receipt, ShoppingBag } from 'lucide-react';
+import { DollarSign, Receipt, ShoppingBag, Star } from 'lucide-react';
 
 import { isAdminAuthenticated } from '@/lib/auth/admin-session';
 import {
@@ -8,9 +8,10 @@ import {
   toggleAcceptingOrdersAction,
   toggleDeliveryAction,
   setProductAvailabilityAction,
+  setProductFeaturedAction,
 } from '@/server/actions/admin.actions';
 import { settingsRepository } from '@/server/repositories/operations.repository';
-import { productRepository } from '@/server/repositories/product.repository';
+import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
 import { analyticsRepository } from '@/server/repositories/analytics.repository';
 import { StatCard } from '@/features/admin/stat-card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,8 @@ export default async function AdminPage() {
     settingsRepository.get(),
     productRepository.findAllForAvailabilityToggle(),
   ]);
+
+  const featuredCount = products.filter((product) => product.isFeatured).length;
 
   const categories = new Map<string, { categoryName: string; products: typeof products }>();
   for (const product of products) {
@@ -89,6 +92,10 @@ export default async function AdminPage() {
                 {settings.acceptingOrders ? 'ABIERTO' : 'CERRADO'}
               </span>
             </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Manda sobre los horarios: abierto acá es abierto en la web, aunque sea fuera de
+              horario. Nada cierra solo.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <form action={toggleAcceptingOrdersAction.bind(null, true)}>
@@ -153,7 +160,21 @@ export default async function AdminPage() {
 
         {/* Menu availability */}
         <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
-          <p className="text-muted-foreground text-xs tracking-widest uppercase">Disponibilidad del menú</p>
+          <div className="space-y-1">
+            <p className="text-muted-foreground text-xs tracking-widest uppercase">Menú</p>
+            <p className="text-muted-foreground text-xs">
+              <Star className="mr-1 inline size-3" />
+              destaca el producto en «Los más pedidos» de la portada.{' '}
+              {featuredCount === 0
+                ? `Sin ninguno destacado se muestran los ${HIGHLIGHTED_LIMIT} más vendidos.`
+                : `${featuredCount} destacado${featuredCount === 1 ? '' : 's'}.`}
+            </p>
+            {featuredCount > HIGHLIGHTED_LIMIT && (
+              <p className="text-xs font-medium text-amber-600">
+                La portada solo muestra {HIGHLIGHTED_LIMIT}: sobran {featuredCount - HIGHLIGHTED_LIMIT}.
+              </p>
+            )}
+          </div>
           {[...categories.values()].map(({ categoryName, products: categoryProducts }) => (
             <div key={categoryName} className="space-y-2">
               <p className="text-muted-foreground/70 text-[10px] tracking-widest uppercase">{categoryName}</p>
@@ -161,9 +182,8 @@ export default async function AdminPage() {
                 {categoryProducts.map((product) => {
                   const isUnavailable = product.availability === 'OUT_OF_STOCK';
                   return (
-                    <form
+                    <div
                       key={product.id}
-                      action={setProductAvailabilityAction.bind(null, product.id, isUnavailable)}
                       className="bg-background border-border flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
                     >
                       <div className="flex min-w-0 items-center gap-2">
@@ -172,18 +192,33 @@ export default async function AdminPage() {
                         />
                         <span className="truncate text-sm">{product.name}</span>
                       </div>
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant="outline"
-                        className={cn(
-                          'shrink-0',
-                          isUnavailable ? 'border-green-500/40 text-green-600' : 'border-red-500/40 text-red-600',
-                        )}
-                      >
-                        {isUnavailable ? 'Activar' : 'Agotar'}
-                      </Button>
-                    </form>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {/* Separate forms: nesting one inside the other is invalid HTML. */}
+                        <form action={setProductFeaturedAction.bind(null, product.id, !product.isFeatured)}>
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="outline"
+                            title={product.isFeatured ? 'Quitar de destacados' : 'Destacar en la portada'}
+                            className={cn(product.isFeatured && 'border-amber-500/40 text-amber-600')}
+                          >
+                            <Star className={cn('size-4', product.isFeatured && 'fill-current')} />
+                          </Button>
+                        </form>
+                        <form action={setProductAvailabilityAction.bind(null, product.id, isUnavailable)}>
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="outline"
+                            className={cn(
+                              isUnavailable ? 'border-green-500/40 text-green-600' : 'border-red-500/40 text-red-600',
+                            )}
+                          >
+                            {isUnavailable ? 'Activar' : 'Agotar'}
+                          </Button>
+                        </form>
+                      </div>
+                    </div>
                   );
                 })}
               </div>

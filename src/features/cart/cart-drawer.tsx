@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
+import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 
 import {
   Sheet,
@@ -16,17 +16,51 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { formatMoney } from '@/lib/money';
-import { estimateLineTotal, useCartStore } from '@/features/cart/cart-store';
+import { cn } from '@/lib/utils';
+import { estimateLineTotal, useCartStore, type CartLine } from '@/features/cart/cart-store';
 import { CheckoutForm } from '@/features/checkout/checkout-form';
 
-export function CartDrawer() {
+/** One add-on offered for a product, with its catalogue price as the fallback. */
+export type CartAddOn = { extraId: string; name: string; price: number };
+
+export function CartDrawer({
+  addOnsByProduct,
+}: {
+  addOnsByProduct: Record<string, CartAddOn[]>;
+}) {
   const isOpen = useCartStore((state) => state.isOpen);
   const close = useCartStore((state) => state.close);
   const lines = useCartStore((state) => state.lines);
   const setQuantity = useCartStore((state) => state.setQuantity);
   const removeLine = useCartStore((state) => state.removeLine);
+  const setLineExtras = useCartStore((state) => state.setLineExtras);
 
   const [step, setStep] = useState<'cart' | 'checkout'>('cart');
+  const [addingTo, setAddingTo] = useState<string>();
+
+  /** Same rule as the card and as `pricing.service`: the size sets the price. */
+  function addOnPrice(line: CartLine, addOn: CartAddOn) {
+    const fromSize = line.variants.find((v) => v.extraPrice != null)?.extraPrice;
+    return fromSize ?? addOn.price;
+  }
+
+  function toggleAddOn(line: CartLine, addOn: CartAddOn) {
+    const already = line.extras.some((e) => e.extraId === addOn.extraId);
+    setLineExtras(
+      line.cartItemId,
+      already
+        ? line.extras.filter((e) => e.extraId !== addOn.extraId)
+        : [
+            ...line.extras,
+            {
+              extraId: addOn.extraId,
+              name: addOn.name,
+              unitPrice: addOnPrice(line, addOn),
+              quantity: 1,
+            },
+          ],
+    );
+  }
 
   // Avoids a hydration mismatch: the persisted cart is only known client-side.
   const [hydrated, setHydrated] = useState(false);
@@ -86,10 +120,82 @@ export function CartDrawer() {
                           {line.variants.map((v) => v.optionName).join(' · ')}
                         </p>
                       )}
+                      {/* Each add-on removable where it is shown, instead of
+                          forcing a trip back to the menu to undo one. */}
                       {line.extras.length > 0 && (
-                        <p className="text-muted-foreground text-xs">
-                          + {line.extras.map((e) => e.name).join(', ')}
-                        </p>
+                        <ul className="flex flex-wrap gap-1">
+                          {line.extras.map((extra) => (
+                            <li key={extra.extraId}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLineExtras(
+                                    line.cartItemId,
+                                    line.extras.filter((e) => e.extraId !== extra.extraId),
+                                  )
+                                }
+                                aria-label={`Quitar ${extra.name}`}
+                                className="border-border text-muted-foreground hover:border-destructive hover:text-destructive flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] transition-colors"
+                              >
+                                {extra.name}
+                                <span className="tabular-nums">
+                                  +{formatMoney(extra.unitPrice)}
+                                </span>
+                                <X className="size-3" aria-hidden />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {(addOnsByProduct[line.productId]?.length ?? 0) > 0 && (
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAddingTo((current) =>
+                                current === line.cartItemId ? undefined : line.cartItemId,
+                              )
+                            }
+                            aria-expanded={addingTo === line.cartItemId}
+                            className="text-primary text-xs font-medium hover:underline"
+                          >
+                            {addingTo === line.cartItemId ? 'Listo' : '+ Agregar algo'}
+                          </button>
+
+                          {addingTo === line.cartItemId && (
+                            <div
+                              role="group"
+                              aria-label={`Agregados para ${line.name}`}
+                              className="flex flex-wrap gap-1 pt-1.5"
+                            >
+                              {(addOnsByProduct[line.productId] ?? []).map((addOn) => {
+                                const picked = line.extras.some(
+                                  (e) => e.extraId === addOn.extraId,
+                                );
+                                return (
+                                  <button
+                                    key={addOn.extraId}
+                                    type="button"
+                                    aria-pressed={picked}
+                                    onClick={() => toggleAddOn(line, addOn)}
+                                    className={cn(
+                                      'rounded-md border px-1.5 py-0.5 text-[11px] transition-colors',
+                                      picked
+                                        ? 'border-primary bg-primary/10 font-semibold'
+                                        : 'border-border hover:border-primary',
+                                    )}
+                                  >
+                                    {addOn.name}
+                                    <span className="text-muted-foreground ml-1 tabular-nums">
+                                      +{formatMoney(addOnPrice(line, addOn))}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       )}
                       <div className="mt-1 flex items-center justify-between">
                         <div className="border-border flex items-center rounded-md border">

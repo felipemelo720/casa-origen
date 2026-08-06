@@ -343,6 +343,11 @@ model VariantOption {
   name        String
   /// Signed delta applied to the product price, in minor currency units.
   priceDelta  Int     @default(0)
+  /// Unit price charged for any add-on while this option is selected, in minor
+  /// currency units. The carta prices toppings by pizza size ($700 on 24 cm,
+  /// $1.000 on 32 cm) and not by topping, so the size owns the number. `null`
+  /// falls back to the extra's own catalogue price.
+  extraPrice  Int?
   isDefault   Boolean @default(false)
   isAvailable Boolean @default(true)
   sortOrder   Int     @default(0)
