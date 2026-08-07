@@ -22,16 +22,17 @@ function slugify(value: string): string {
 async function seedSettings() {
   await prisma.restaurantSettings.upsert({
     where: { id: 'singleton' },
-    update: {},
+    update: { logo: '/logo.png', whatsapp: '+56920499873' },
     create: {
       id: 'singleton',
       name: 'Casa Origen',
+      logo: '/logo.png',
       tagline: 'Cocina de origen, sabor de siempre',
       description:
         'Cocina chilena contemporánea preparada con ingredientes de productores locales.',
       email: 'contacto@casaorigen.cl',
       phone: '+56 2 2345 6789',
-      whatsapp: '+56912345678',
+      whatsapp: '+56920499873',
       address: 'Av. Providencia 1234, Providencia, Santiago',
       instagramUrl: 'https://instagram.com/casaorigen',
       acceptingOrders: true,
@@ -53,41 +54,57 @@ async function seedSettings() {
 async function seedPaymentMethods() {
   const methods = [
     {
+      code: PaymentMethodCode.TRANSFER,
+      name: 'Transferencia',
+      requiresChange: false,
+      isActive: true,
+      sortOrder: 1,
+      description: 'No transfieras todavía.',
+      instructions:
+        'Confirmas el pedido, te escribimos por WhatsApp para revisar que esté todo disponible y ahí te pasamos los datos bancarios. Recién entonces transfieres y nos mandas el comprobante.',
+    },
+    {
       code: PaymentMethodCode.CASH,
       name: 'Efectivo',
       requiresChange: true,
-      sortOrder: 1,
+      isActive: true,
+      sortOrder: 2,
       description: 'Paga al recibir tu pedido.',
+      instructions: null,
     },
+    // Los pedidos viejos apuntan a estos métodos (relación Restrict), así que
+    // se desactivan en vez de borrarse.
     {
       code: PaymentMethodCode.DEBIT,
       name: 'Débito',
       requiresChange: false,
-      sortOrder: 2,
+      isActive: false,
+      sortOrder: 3,
       description: 'Máquina POS a domicilio.',
+      instructions: null,
     },
     {
       code: PaymentMethodCode.CREDIT,
       name: 'Crédito',
       requiresChange: false,
-      sortOrder: 3,
-      description: 'Máquina POS a domicilio.',
-    },
-    {
-      code: PaymentMethodCode.TRANSFER,
-      name: 'Transferencia',
-      requiresChange: false,
+      isActive: false,
       sortOrder: 4,
-      description: 'Te enviaremos los datos bancarios al confirmar.',
-      instructions:
-        'Casa Origen SpA · RUT 77.123.456-7 · Banco de Chile · Cuenta Corriente 000-12345-67 · pagos@casaorigen.cl',
+      description: 'Máquina POS a domicilio.',
+      instructions: null,
     },
   ];
 
   for (const method of methods) {
     await prisma.paymentMethod.upsert({
       where: { code: method.code },
-      update: { name: method.name, description: method.description, sortOrder: method.sortOrder },
+      update: {
+        name: method.name,
+        description: method.description,
+        instructions: method.instructions,
+        requiresChange: method.requiresChange,
+        isActive: method.isActive,
+        sortOrder: method.sortOrder,
+      },
       create: method,
     });
   }
@@ -120,8 +137,20 @@ async function seedCommunes() {
   // over a threshold the storefront never showed.
   const communes = [
     { slug: 'paine-centro', name: 'Paine Centro', deliveryFee: 1500, minOrder: 0, extraMinutes: 0 },
-    { slug: 'viluco', name: 'Viluco (hasta el retén)', deliveryFee: 2200, minOrder: 0, extraMinutes: 8 },
-    { slug: 'huelquen', name: 'Huelquén (hasta el retén)', deliveryFee: 2500, minOrder: 0, extraMinutes: 10 },
+    {
+      slug: 'viluco',
+      name: 'Viluco (hasta el retén)',
+      deliveryFee: 2200,
+      minOrder: 0,
+      extraMinutes: 8,
+    },
+    {
+      slug: 'huelquen',
+      name: 'Huelquén (hasta el retén)',
+      deliveryFee: 2500,
+      minOrder: 0,
+      extraMinutes: 10,
+    },
     { slug: 'champa', name: 'Champa', deliveryFee: 2500, minOrder: 0, extraMinutes: 10 },
     { slug: 'hospital', name: 'Hospital', deliveryFee: 2800, minOrder: 0, extraMinutes: 12 },
   ];
@@ -254,7 +283,6 @@ type ProductSeed = {
   extras?: string[];
 };
 
-
 type CategorySeed = {
   name: string;
   description: string;
@@ -354,8 +382,10 @@ const CATALOGUE: CategorySeed[] = [
       },
       {
         name: 'La Huerta',
-        shortDescription: 'Pomodoro, mozzarella, champiñón, cebolla morada, pimentón, choclo y aceituna',
-        description: 'Pomodoro, mozzarella, champiñón, cebolla morada, pimentón, choclo y aceituna.',
+        shortDescription:
+          'Pomodoro, mozzarella, champiñón, cebolla morada, pimentón, choclo y aceituna',
+        description:
+          'Pomodoro, mozzarella, champiñón, cebolla morada, pimentón, choclo y aceituna.',
         price: 6000,
         prepMinutes: 22,
         image: '/menu/la-huerta.jpg',
@@ -392,11 +422,7 @@ const CATALOGUE: CategorySeed[] = [
   },
 ];
 
-async function upsertProduct(
-  product: ProductSeed,
-  categoryId: string,
-  sortOrder: number,
-) {
+async function upsertProduct(product: ProductSeed, categoryId: string, sortOrder: number) {
   const slug = slugify(product.name);
 
   const record = await prisma.product.upsert({
@@ -438,9 +464,7 @@ async function upsertProduct(
 
   await prisma.productImage.deleteMany({ where: { productId: record.id } });
   await prisma.productImage.createMany({
-    data: [
-      { productId: record.id, url: product.image, alt: product.name, sortOrder: 0 },
-    ],
+    data: [{ productId: record.id, url: product.image, alt: product.name, sortOrder: 0 }],
   });
 
   // Cleared before re-linking, not merged: a recipe that loses an ingredient or
@@ -587,16 +611,9 @@ async function seedBanners() {
       placement: BannerPlacement.HERO,
       sortOrder: 0,
     },
-    {
-      title: 'Delivery gratis sobre $35.000',
-      subtitle: 'En Providencia, Ñuñoa y Santiago Centro.',
-      image:
-        'https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=2000&q=80',
-      ctaLabel: 'Pedir ahora',
-      ctaHref: '/#menu',
-      placement: BannerPlacement.MENU_TOP,
-      sortOrder: 0,
-    },
+    // Sin banner MENU_TOP: no hay sección que lo renderice y el único que había
+    // apuntaba a Unsplash, que se cae sin aviso. Un 404 de imagen es
+    // `Runtime Error: [object Event]` sin stack. Todo asset va en `public/`.
   ];
 
   for (const banner of banners) {

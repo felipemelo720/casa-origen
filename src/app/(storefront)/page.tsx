@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { Clock } from 'lucide-react';
 
+import { ClosedNotice } from '@/components/shared/closed-notice';
 import { ProductCard } from '@/features/catalog/product-card';
 import { CouponBanner } from '@/features/promo/coupon-banner';
 import { DeliveryChecker } from '@/features/delivery/delivery-checker';
@@ -126,10 +126,9 @@ export default async function HomePage() {
       <section id="menu" className="mx-auto max-w-7xl scroll-mt-28 px-4 py-16 sm:px-6 lg:px-8">
         {/* Repeated here: anyone jumping straight to #menu never sees the hero. */}
         {!open.isOpen && (
-          <p className="mb-6 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-700 dark:text-amber-300">
-            <Clock className="size-4 shrink-0" />
-            <span>{open.reason} Puedes mirar la carta, pero todavía no recibimos pedidos.</span>
-          </p>
+          <ClosedNotice className="mb-6">
+            {open.reason} Puedes mirar la carta, pero todavía no recibimos pedidos.
+          </ClosedNotice>
         )}
 
         {/* One block per category instead of a single grid under a hardcoded

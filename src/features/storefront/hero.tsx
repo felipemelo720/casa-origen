@@ -1,7 +1,8 @@
 import Image from 'next/image';
-import { ArrowRight, Clock } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ClosedNotice } from '@/components/shared/closed-notice';
 import type { OpenState } from '@/server/services/schedule.service';
 
 type Props = {
@@ -32,7 +33,7 @@ export function StorefrontHero({ kicker, title, subtitle, image, open }: Props) 
         aria-hidden
       />
 
-      <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6 lg:grid lg:grid-cols-12 lg:items-center lg:gap-0 lg:pt-16 lg:px-8">
+      <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6 lg:grid lg:grid-cols-12 lg:items-center lg:gap-0 lg:px-8 lg:pt-16">
         <div className="relative lg:col-span-7 lg:col-start-6 lg:row-start-1">
           {/* Offset frame, the one purely decorative element: an outline nudged
               off the photo, the way a print layout registers a plate. */}
@@ -74,15 +75,12 @@ export function StorefrontHero({ kicker, title, subtitle, image, open }: Props) 
           </h1>
 
           {subtitle && (
-            <p className="text-muted-foreground mt-4 max-w-prose text-base sm:text-lg">{subtitle}</p>
-          )}
-
-          {!open.isOpen && (
-            <p className="mt-5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-700 dark:text-amber-300">
-              <Clock className="size-4 shrink-0" aria-hidden />
-              <span>{open.reason}</span>
+            <p className="text-muted-foreground mt-4 max-w-prose text-base sm:text-lg">
+              {subtitle}
             </p>
           )}
+
+          {!open.isOpen && <ClosedNotice className="mt-5">{open.reason}</ClosedNotice>}
 
           <div className="mt-7 flex flex-wrap gap-3">
             <Button size="lg" asChild>
