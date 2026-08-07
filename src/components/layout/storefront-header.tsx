@@ -1,10 +1,10 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Clock, MapPin, Menu, MessageCircle, Phone, Pizza, ShoppingBag } from 'lucide-react';
+import { Clock, MapPin, Menu, MessageCircle, Phone, Pizza, ShoppingBag, User } from 'lucide-react';
 
+import { BrandMark } from '@/components/layout/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
@@ -24,7 +24,12 @@ const NAV_LINKS = [
 
 const NAV_IDS = NAV_LINKS.map((link) => link.href.slice(1));
 
-const OPEN_STATE_POLL_MS = 15_000;
+// 60s, not 15s: `/api/open-state` is `force-dynamic`, so every tick is a query
+// per open tab. Toggling `acceptingOrders` in /admin already calls
+// `revalidatePath('/')`, so a fresh visit is instant either way; this poll only
+// covers tabs that were already open. `visibilitychange` and `focus` still
+// refresh on the spot, which is when staleness is actually noticed.
+const OPEN_STATE_POLL_MS = 60_000;
 
 export type HeaderTodayHours = {
   isClosed: boolean;
@@ -204,21 +209,20 @@ export function StorefrontHeader({
             aria-label={`${restaurantName}, ir al inicio`}
           >
             {logo ? (
-              <Image
-                src={logo}
-                alt=""
-                width={36}
-                height={36}
-                className="size-9 shrink-0 rounded-lg object-cover"
-              />
+              // Wordmark PNG is solid white: masked with `currentColor` so it
+              // reads on both the light and dark `--foreground` token instead
+              // of vanishing on a light background.
+              <BrandMark logo={logo} />
             ) : (
-              <span className="bg-primary text-primary-foreground grid size-9 shrink-0 place-items-center rounded-lg">
-                <Pizza className="size-5" aria-hidden />
-              </span>
+              <>
+                <span className="bg-primary text-primary-foreground grid size-9 shrink-0 place-items-center rounded-lg">
+                  <Pizza className="size-5" aria-hidden />
+                </span>
+                <span className="font-display truncate text-lg font-bold tracking-tight sm:text-xl">
+                  {restaurantName}
+                </span>
+              </>
             )}
-            <span className="font-display truncate text-lg font-bold tracking-tight sm:text-xl">
-              {restaurantName}
-            </span>
           </Link>
 
           <OpenBadge open={openState} />
@@ -245,6 +249,14 @@ export function StorefrontHeader({
           </nav>
 
           <div className="ml-auto flex items-center gap-1 md:ml-0">
+            {/* A route, not an anchor: the account page reads a session cookie
+                and cannot live on the static landing. */}
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/cuenta" aria-label="Mi cuenta">
+                <User className="size-4" aria-hidden />
+              </Link>
+            </Button>
+
             <ThemeToggle />
 
             <Button

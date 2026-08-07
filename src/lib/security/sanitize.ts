@@ -10,11 +10,7 @@ const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
 
 /** Collapses whitespace, strips control characters and enforces a max length. */
 export function sanitizeText(value: string, maxLength = 2_000): string {
-  return value
-    .replace(CONTROL_CHARS, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxLength);
+  return value.replace(CONTROL_CHARS, '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
 
 /** Same as `sanitizeText` but preserves intentional line breaks. */

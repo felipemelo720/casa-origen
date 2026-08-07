@@ -53,9 +53,7 @@ export function ProductCard({ product }: { product: ProductDetail }) {
     return selectedOption?.extraPrice ?? entry.priceOverride ?? entry.extra.price;
   }
 
-  const chosenExtras = availableExtras.filter((entry) =>
-    selectedExtraIds.includes(entry.extraId),
-  );
+  const chosenExtras = availableExtras.filter((entry) => selectedExtraIds.includes(entry.extraId));
 
   const basePrice = product.offerPrice ?? product.price;
   const hasOffer = product.offerPrice !== null && product.offerPrice < product.price;
@@ -64,9 +62,7 @@ export function ProductCard({ product }: { product: ProductDetail }) {
 
   function toggleExtra(extraId: string) {
     setSelectedExtraIds((current) =>
-      current.includes(extraId)
-        ? current.filter((id) => id !== extraId)
-        : [...current, extraId],
+      current.includes(extraId) ? current.filter((id) => id !== extraId) : [...current, extraId],
     );
   }
 
@@ -157,11 +153,7 @@ export function ProductCard({ product }: { product: ProductDetail }) {
             decision, and hiding all but the selected one forced a tap per size
             just to find out what the big one costs. */}
         {sizeGroup && sizeGroup.options.length > 0 && (
-          <div
-            role="group"
-            aria-label={sizeGroup.name}
-            className="mt-1 flex flex-col gap-1.5"
-          >
+          <div role="group" aria-label={sizeGroup.name} className="mt-1 flex flex-col gap-1.5">
             {sizeGroup.options.map((option) => {
               const isSelected = option.id === selectedOptionId;
               return (

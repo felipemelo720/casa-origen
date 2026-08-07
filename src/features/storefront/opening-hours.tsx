@@ -36,10 +36,7 @@ export function OpeningHours({ schedule, open }: Props) {
         {schedule.map((day) => (
           <div
             key={day.dayOfWeek}
-            className={cn(
-              'flex items-center justify-between py-2',
-              day.isToday && 'font-semibold',
-            )}
+            className={cn('flex items-center justify-between py-2', day.isToday && 'font-semibold')}
           >
             <dt className={cn(!day.isToday && 'text-muted-foreground')}>
               {day.label}

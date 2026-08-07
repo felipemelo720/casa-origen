@@ -1,24 +1,29 @@
 import { StorefrontHeader } from '@/components/layout/storefront-header';
 import { StorefrontFooter } from '@/components/layout/storefront-footer';
-import { CartDrawer } from '@/features/cart/cart-drawer';
+import { CartDrawerMount } from '@/features/cart/cart-drawer-mount';
 import { buildWhatsAppUrl } from '@/lib/whatsapp-link';
 import { productRepository } from '@/server/repositories/product.repository';
-import { settingsRepository } from '@/server/repositories/operations.repository';
+import {
+  communeRepository,
+  paymentMethodRepository,
+  settingsRepository,
+} from '@/server/repositories/operations.repository';
 import { getOpenState, getWeeklySchedule } from '@/server/services/schedule.service';
 import type { CartAddOn } from '@/features/cart/cart-drawer';
+import type { CheckoutOptions } from '@/features/checkout/checkout-form';
 
-export default async function StorefrontLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
   // Same check the checkout enforces, so the badge cannot say "abierto" while
   // `placeOrder` refuses the order.
-  const [settings, open, schedule, addOns] = await Promise.all([
+  const [settings, open, schedule, addOns, communes, paymentMethods] = await Promise.all([
     settingsRepository.get(),
     getOpenState(),
     getWeeklySchedule(),
     productRepository.findAddOnsByProduct(),
+    // Rendered by the checkout inside the drawer. Loaded here so the form is
+    // complete on its first paint instead of fetching after it opens.
+    communeRepository.findAllActive(),
+    paymentMethodRepository.findAllActive(),
   ]);
 
   // Keyed by product so the drawer can look up a line's add-ons in one hop.
@@ -31,6 +36,20 @@ export default async function StorefrontLayout({
     });
     return byProduct;
   }, {});
+
+  // Narrowed here for the same reason as `addOnsByProduct`: these are Prisma
+  // rows and the checkout is a client component.
+  const checkoutOptions: CheckoutOptions = {
+    communes: communes.map((commune) => ({ id: commune.id, name: commune.name })),
+    paymentMethods: paymentMethods.map((method) => ({
+      id: method.id,
+      name: method.name,
+      description: method.description,
+      instructions: method.instructions,
+      requiresChange: method.requiresChange,
+    })),
+    deliveryEnabled: settings.deliveryEnabled,
+  };
 
   const whatsappUrl = settings.whatsapp
     ? buildWhatsAppUrl(settings.whatsapp, `Hola ${settings.name}, quiero hacer un pedido.`)
@@ -67,7 +86,7 @@ export default async function StorefrontLayout({
         deliveryEtaMinutes={settings.deliveryEtaMinutes}
         pickupEtaMinutes={settings.pickupEtaMinutes}
       />
-      <CartDrawer addOnsByProduct={addOnsByProduct} />
+      <CartDrawerMount addOnsByProduct={addOnsByProduct} checkoutOptions={checkoutOptions} />
     </div>
   );
 }

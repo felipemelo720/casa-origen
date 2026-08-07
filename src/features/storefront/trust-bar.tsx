@@ -50,7 +50,7 @@ export function TrustBar({
         {items.map((item) => (
           <div
             key={item.label}
-            className="flex basis-1/2 items-center justify-center gap-3 sm:basis-0 sm:flex-1 sm:px-4"
+            className="flex basis-1/2 items-center justify-center gap-3 sm:flex-1 sm:basis-0 sm:px-4"
           >
             <item.icon className="text-primary size-5 shrink-0" aria-hidden />
             <div className="min-w-0">

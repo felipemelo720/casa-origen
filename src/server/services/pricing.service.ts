@@ -64,10 +64,7 @@ async function priceItem(input: CartItemInput): Promise<PricedItem> {
 
   const variantsByOption = new Map(
     product.variantGroups.flatMap((group) =>
-      group.options.map((option) => [
-        option.id,
-        { group, option },
-      ] as const),
+      group.options.map((option) => [option.id, { group, option }] as const),
     ),
   );
 
@@ -154,9 +151,7 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
 
   const settings = await settingsRepository.get();
   if (subtotal < settings.minOrderAmount) {
-    throw new BusinessRuleError(
-      `El pedido mínimo es de ${settings.minOrderAmount}.`,
-    );
+    throw new BusinessRuleError(`El pedido mínimo es de ${settings.minOrderAmount}.`);
   }
 
   // --- Best applicable promotion (highest priority, first match wins) -----
@@ -173,15 +168,12 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
     const applies =
       promo.scope === 'ALL' ||
       (promo.scope === 'PRODUCT' && promo.products.some((p) => productIds.has(p.productId))) ||
-      (promo.scope === 'CATEGORY' &&
-        promo.categories.some((c) => categoryIds.has(c.categoryId)));
+      (promo.scope === 'CATEGORY' && promo.categories.some((c) => categoryIds.has(c.categoryId)));
 
     if (!applies) continue;
 
     const raw =
-      promo.discountType === 'PERCENTAGE'
-        ? percentageOf(subtotal, promo.value)
-        : promo.value;
+      promo.discountType === 'PERCENTAGE' ? percentageOf(subtotal, promo.value) : promo.value;
     const capped = promo.maxDiscount ? Math.min(raw, promo.maxDiscount) : raw;
 
     promotionDiscount = nonNegative(capped);
@@ -194,7 +186,8 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
   if (input.orderType === 'DELIVERY') {
     if (!input.communeId) throw new BusinessRuleError('Selecciona tu comuna de despacho.');
     const commune = await communeRepository.findById(input.communeId);
-    if (!commune || !commune.isActive) throw new BusinessRuleError('La comuna seleccionada no está disponible.');
+    if (!commune || !commune.isActive)
+      throw new BusinessRuleError('La comuna seleccionada no está disponible.');
     if (subtotal < commune.minOrder) {
       throw new BusinessRuleError(
         `El pedido mínimo para ${commune.name} es de ${commune.minOrder}.`,

@@ -43,7 +43,11 @@ export type RateLimitResult = {
 
 export function consume(
   identifier: string,
-  { scope, limit = env.RATE_LIMIT_MAX_REQUESTS, windowMs = env.RATE_LIMIT_WINDOW_MS }: RateLimitOptions,
+  {
+    scope,
+    limit = env.RATE_LIMIT_MAX_REQUESTS,
+    windowMs = env.RATE_LIMIT_WINDOW_MS,
+  }: RateLimitOptions,
 ): RateLimitResult {
   const now = Date.now();
   evictExpired(now);

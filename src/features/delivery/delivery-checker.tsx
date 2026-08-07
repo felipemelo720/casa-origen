@@ -31,7 +31,12 @@ type Props = {
  * cart — the question that otherwise only gets answered at checkout, once the
  * work of choosing is already done.
  */
-export function DeliveryChecker({ zones, deliveryEnabled, baseEtaMinutes, pickupEtaMinutes }: Props) {
+export function DeliveryChecker({
+  zones,
+  deliveryEnabled,
+  baseEtaMinutes,
+  pickupEtaMinutes,
+}: Props) {
   const [zoneId, setZoneId] = useState<string>();
   const zone = zones.find((z) => z.id === zoneId);
 

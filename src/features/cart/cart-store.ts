@@ -12,7 +12,12 @@ export type CartVariantSelection = {
    *  this existed; the drawer then falls back to the extra's own price. */
   extraPrice?: number | null;
 };
-export type CartExtraSelection = { extraId: string; name: string; unitPrice: number; quantity: number };
+export type CartExtraSelection = {
+  extraId: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+};
 
 export type CartLine = {
   cartItemId: string;
@@ -105,7 +110,9 @@ export function useCartCount(): number {
 }
 
 export function useCartSubtotal(): number {
-  return useCartStore((state) => state.lines.reduce((sum, line) => sum + estimateLineTotal(line), 0));
+  return useCartStore((state) =>
+    state.lines.reduce((sum, line) => sum + estimateLineTotal(line), 0),
+  );
 }
 
 /** Maps a persisted cart line back into the selection-only payload the server accepts. */

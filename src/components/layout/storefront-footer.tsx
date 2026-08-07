@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import {
   Bike,
   Clock,
@@ -12,6 +11,7 @@ import {
   Store,
 } from 'lucide-react';
 
+import { BrandMark } from '@/components/layout/brand-mark';
 import type { ScheduleDay } from '@/server/services/schedule.service';
 import { cn } from '@/lib/utils';
 
@@ -71,19 +71,18 @@ export function StorefrontFooter({
         <div className="space-y-4">
           <div className="flex items-center gap-2.5">
             {logo ? (
-              <Image
-                src={logo}
-                alt=""
-                width={36}
-                height={36}
-                className="size-9 rounded-lg object-cover"
-              />
+              <>
+                <BrandMark logo={logo} />
+                <p className="sr-only">{restaurantName}</p>
+              </>
             ) : (
-              <span className="bg-primary text-primary-foreground grid size-9 place-items-center rounded-lg">
-                <Pizza className="size-5" aria-hidden />
-              </span>
+              <>
+                <span className="bg-primary text-primary-foreground grid size-9 place-items-center rounded-lg">
+                  <Pizza className="size-5" aria-hidden />
+                </span>
+                <p className="font-display text-lg font-bold">{restaurantName}</p>
+              </>
             )}
-            <p className="font-display text-lg font-bold">{restaurantName}</p>
           </div>
 
           <p className="text-muted-foreground text-sm">
@@ -224,12 +223,7 @@ export function StorefrontFooter({
           <p>
             © {new Date().getFullYear()} {restaurantName}. Todos los derechos reservados.
           </p>
-          <p className="flex items-center gap-4">
-            <span>Paine, Región Metropolitana</span>
-            <a href="/admin" className="hover:text-primary">
-              Administración
-            </a>
-          </p>
+          <p>Paine, Región Metropolitana</p>
         </div>
       </div>
     </footer>
