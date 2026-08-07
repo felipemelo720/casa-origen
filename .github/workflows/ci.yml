@@ -8,6 +8,30 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    # Throwaway database for this run only. `/` is a static page that queries
+    # Postgres at build time, so `next build` cannot succeed without one.
+    # These credentials are not secrets: the container dies with the job.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: casaorigen
+          POSTGRES_PASSWORD: casaorigen
+          POSTGRES_DB: casaorigen
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://casaorigen:casaorigen@localhost:5432/casaorigen?schema=public
+      ADMIN_PASSWORD: ci-placeholder-password
+      AUTH_SECRET: ci-placeholder-secret-at-least-32-characters-long
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,7 +50,11 @@ jobs:
 
       - run: npm run test
 
-      - name: Build
-        run: npm run build
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Schema first, then catalogue data: the landing renders products,
+      # settings and business hours during the build.
+      - name: Prepare database
+        run: |
+          npx prisma migrate deploy
+          npx prisma db seed
+
+      - run: npm run build
