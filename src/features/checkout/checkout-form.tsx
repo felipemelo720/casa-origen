@@ -21,9 +21,29 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { formatMoney } from '@/lib/money';
-import { openWhatsAppOrder } from '@/lib/whatsapp';
 import { estimateLineTotal, toCartItemInput, useCartStore } from '@/features/cart/cart-store';
-import { getCheckoutOptionsAction, placeOrderAction, previewCartTotalsAction } from '@/server/actions/checkout.actions';
+import { placeOrderAction, previewCartTotalsAction } from '@/server/actions/checkout.actions';
+
+/**
+ * Everything the checkout needs that does not depend on the cart. Loaded by the
+ * storefront layout and passed down, so the form renders complete on first
+ * paint instead of filling in after a round trip.
+ *
+ * Narrow on purpose: these start life as Prisma rows and this is a client
+ * component. `deliveryEnabled` only hides the option here — `placeOrder`
+ * re-checks it server-side.
+ */
+export type CheckoutOptions = {
+  communes: { id: string; name: string }[];
+  paymentMethods: {
+    id: string;
+    name: string;
+    description: string | null;
+    instructions: string | null;
+    requiresChange: boolean;
+  }[];
+  deliveryEnabled: boolean;
+};
 
 const chileanPhone = /^\+?56?\s?9\d{8}$|^\+?\d{8,15}$/;
 
@@ -44,10 +64,18 @@ const formSchema = z
   .superRefine((data, ctx) => {
     if (data.orderType === 'DELIVERY') {
       if (!data.street || data.street.trim().length < 5) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['street'], message: 'Ingresa tu dirección.' });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['street'],
+          message: 'Ingresa tu dirección.',
+        });
       }
       if (!data.communeId) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['communeId'], message: 'Selecciona tu comuna.' });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['communeId'],
+          message: 'Selecciona tu comuna.',
+        });
       }
     }
   });
@@ -55,7 +83,15 @@ const formSchema = z
 type FormValues = z.infer<typeof formSchema>;
 
 /** Checkout step rendered inside the cart drawer — no separate /checkout page. */
-export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlaced: (code: string) => void }) {
+export function CheckoutForm({
+  options,
+  onBack,
+  onPlaced,
+}: {
+  options: CheckoutOptions;
+  onBack: () => void;
+  onPlaced: (placed: { code: string; whatsappUrl: string | null }) => void;
+}) {
   const lines = useCartStore((state) => state.lines);
   const couponCode = useCartStore((state) => state.couponCode);
   const setCoupon = useCartStore((state) => state.setCoupon);
@@ -68,15 +104,7 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
   const [couponInput, setCouponInput] = useState(couponCode ?? '');
   const [submitting, setSubmitting] = useState(false);
 
-  const optionsQuery = useQuery({
-    queryKey: ['checkout-options'],
-    queryFn: () => getCheckoutOptionsAction(undefined),
-  });
-  const options = optionsQuery.data?.ok ? optionsQuery.data.data : null;
-  const communes = options?.communes ?? [];
-  const paymentMethods = options?.paymentMethods ?? [];
-  // Assume delivery is on until the settings land, so the option doesn't flicker in.
-  const deliveryEnabled = options?.deliveryEnabled ?? true;
+  const { communes, paymentMethods, deliveryEnabled } = options;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -134,7 +162,8 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
   });
 
   const preview = previewQuery.data?.ok ? previewQuery.data.data : null;
-  const previewError = previewQuery.data && !previewQuery.data.ok ? previewQuery.data.message : null;
+  const previewError =
+    previewQuery.data && !previewQuery.data.ok ? previewQuery.data.message : null;
 
   const subtotal = lines.reduce((sum, line) => sum + estimateLineTotal(line), 0);
   const cashGivenAmount = Number.parseInt((watchedCashGiven ?? '').replace(/[^\d]/g, ''), 10) || 0;
@@ -173,24 +202,11 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
       return;
     }
 
-    if (options?.whatsapp) {
-      openWhatsAppOrder(options.whatsapp, lines, {
-        code: result.data.code,
-        firstName: values.firstName,
-        lastName: values.lastName,
-        phone: values.phone,
-        orderType: values.orderType,
-        street: values.street,
-        communeName: communes.find((c) => c.id === values.communeId)?.name,
-        paymentMethodName: selectedPaymentMethod?.name ?? '',
-        cashGiven: selectedPaymentMethod?.requiresChange ? cashGivenAmount : undefined,
-        notes: values.notes,
-        total: result.data.total,
-      });
-    }
-
+    // No `window.open` here on purpose: the await above already spent the user
+    // gesture, so mobile browsers block the popup. The confirmation step below
+    // renders a plain link the customer taps instead.
     clearCart();
-    onPlaced(result.data.code);
+    onPlaced({ code: result.data.code, whatsappUrl: result.data.whatsappUrl });
   }
 
   /** One compact error line per section instead of a label + message per field. */
@@ -244,10 +260,17 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
           <Input placeholder="Nombre" aria-label="Nombre" {...form.register('firstName')} />
           <Input placeholder="Apellido" aria-label="Apellido" {...form.register('lastName')} />
           <Input placeholder="+56 9 1234 5678" aria-label="Teléfono" {...form.register('phone')} />
-          <Input type="email" placeholder="Correo (opcional)" aria-label="Correo" {...form.register('email')} />
+          <Input
+            type="email"
+            placeholder="Correo (opcional)"
+            aria-label="Correo"
+            {...form.register('email')}
+          />
         </div>
         {firstErrorOf('firstName', 'lastName', 'phone', 'email') && (
-          <p className="text-destructive text-xs">{firstErrorOf('firstName', 'lastName', 'phone', 'email')}</p>
+          <p className="text-destructive text-xs">
+            {firstErrorOf('firstName', 'lastName', 'phone', 'email')}
+          </p>
         )}
       </section>
 
@@ -255,14 +278,21 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
         <section className="space-y-2">
           <h3 className="font-display text-sm font-semibold">Dirección de despacho</h3>
           <div className="grid grid-cols-2 gap-2">
-            <Input placeholder="Calle y número" aria-label="Calle y número" {...form.register('street')} />
-            <Input placeholder="Depto, referencia…" aria-label="Referencia" {...form.register('reference')} />
+            <Input
+              placeholder="Calle y número"
+              aria-label="Calle y número"
+              {...form.register('street')}
+            />
+            <Input
+              placeholder="Depto, referencia…"
+              aria-label="Referencia"
+              {...form.register('reference')}
+            />
           </div>
           <div>
             <Select
               value={watchedCommuneId || undefined}
               onValueChange={(value) => form.setValue('communeId', value)}
-              disabled={optionsQuery.isLoading}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Selecciona tu comuna" />
@@ -292,7 +322,6 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
           {paymentMethods.map((pm) => (
             <label
               key={pm.id}
-              title={pm.description ?? undefined}
               className="border-border has-[[data-state=checked]]:border-primary flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
             >
               <RadioGroupItem value={pm.id} />
@@ -313,12 +342,23 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
               {...form.register('cashGiven')}
             />
             {preview && cashGivenAmount > 0 && (
-              <span className="text-muted-foreground shrink-0 text-xs">Vuelto {formatMoney(changeDue)}</span>
+              <span className="text-muted-foreground shrink-0 text-xs">
+                Vuelto {formatMoney(changeDue)}
+              </span>
             )}
           </div>
         )}
-        {selectedPaymentMethod?.instructions && (
-          <p className="text-muted-foreground text-xs">{selectedPaymentMethod.instructions}</p>
+        {(selectedPaymentMethod?.description ?? selectedPaymentMethod?.instructions) && (
+          <div className="bg-muted/50 border-border space-y-1 rounded-lg border p-3">
+            {selectedPaymentMethod?.description && (
+              <p className="text-foreground text-xs font-medium">
+                {selectedPaymentMethod.description}
+              </p>
+            )}
+            {selectedPaymentMethod?.instructions && (
+              <p className="text-muted-foreground text-xs">{selectedPaymentMethod.instructions}</p>
+            )}
+          </div>
         )}
       </section>
 
@@ -371,7 +411,12 @@ export function CheckoutForm({ onBack, onPlaced }: { onBack: () => void; onPlace
         </div>
       </section>
 
-      <Button type="submit" size="lg" className="w-full" disabled={submitting || items.length === 0 || optionsQuery.isLoading}>
+      <Button
+        type="submit"
+        size="lg"
+        className="w-full"
+        disabled={submitting || items.length === 0}
+      >
         {submitting && <Loader2 className="size-4 animate-spin" />}
         Confirmar pedido
       </Button>

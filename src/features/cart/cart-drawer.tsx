@@ -2,32 +2,27 @@
 
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
+import { CheckCircle2, MessageCircle, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
 
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { formatMoney } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { estimateLineTotal, useCartStore, type CartLine } from '@/features/cart/cart-store';
-import { CheckoutForm } from '@/features/checkout/checkout-form';
+import { CheckoutForm, type CheckoutOptions } from '@/features/checkout/checkout-form';
+import { QueryProvider } from '@/components/providers/query-provider';
 
 /** One add-on offered for a product, with its catalogue price as the fallback. */
 export type CartAddOn = { extraId: string; name: string; price: number };
 
-export function CartDrawer({
-  addOnsByProduct,
-}: {
+export type CartDrawerProps = {
   addOnsByProduct: Record<string, CartAddOn[]>;
-}) {
+  checkoutOptions: CheckoutOptions;
+};
+
+export function CartDrawer({ addOnsByProduct, checkoutOptions }: CartDrawerProps) {
   const isOpen = useCartStore((state) => state.isOpen);
   const close = useCartStore((state) => state.close);
   const lines = useCartStore((state) => state.lines);
@@ -35,7 +30,8 @@ export function CartDrawer({
   const removeLine = useCartStore((state) => state.removeLine);
   const setLineExtras = useCartStore((state) => state.setLineExtras);
 
-  const [step, setStep] = useState<'cart' | 'checkout'>('cart');
+  const [step, setStep] = useState<'cart' | 'checkout' | 'placed'>('cart');
+  const [placed, setPlaced] = useState<{ code: string; whatsappUrl: string | null }>();
   const [addingTo, setAddingTo] = useState<string>();
 
   /** Same rule as the card and as `pricing.service`: the size sets the price. */
@@ -68,14 +64,19 @@ export function CartDrawer({
 
   // Back to the cart view whenever the drawer is reopened later.
   useEffect(() => {
-    if (!isOpen) setStep('cart');
+    if (!isOpen) {
+      setStep('cart');
+      setPlaced(undefined);
+    }
   }, [isOpen]);
 
   const subtotal = lines.reduce((sum, line) => sum + estimateLineTotal(line), 0);
 
-  function handlePlaced(code: string) {
-    close();
-    toast.success(`Pedido ${code} enviado por WhatsApp.`);
+  // The drawer stays open: the WhatsApp link needs a real tap to survive the
+  // mobile popup blocker, so the customer has to see it before anything closes.
+  function handlePlaced(result: { code: string; whatsappUrl: string | null }) {
+    setPlaced(result);
+    setStep('placed');
   }
 
   return (
@@ -84,11 +85,42 @@ export function CartDrawer({
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <ShoppingBag className="size-5" />
-            {step === 'cart' ? 'Tu pedido' : 'Finalizar pedido'}
+            {step === 'cart'
+              ? 'Tu pedido'
+              : step === 'checkout'
+                ? 'Finalizar pedido'
+                : '¡Pedido recibido!'}
           </SheetTitle>
         </SheetHeader>
 
-        {!hydrated || lines.length === 0 ? (
+        {step === 'placed' && placed ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+            <CheckCircle2 className="text-success size-12" aria-hidden />
+            <div className="space-y-1">
+              <p className="font-display text-lg font-semibold">Pedido {placed.code}</p>
+              <p className="text-muted-foreground max-w-prose text-sm">
+                Ya quedó guardado. Envíanoslo por WhatsApp para que lo empecemos a preparar.
+              </p>
+            </div>
+
+            {placed.whatsappUrl ? (
+              <Button asChild size="lg" className="w-full">
+                <a href={placed.whatsappUrl} target="_blank" rel="noopener noreferrer">
+                  <MessageCircle className="size-4" aria-hidden />
+                  Enviar por WhatsApp
+                </a>
+              </Button>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Guardamos tu pedido. Te llamamos al teléfono que dejaste para confirmarlo.
+              </p>
+            )}
+
+            <Button variant="ghost" onClick={close}>
+              Seguir viendo el menú
+            </Button>
+          </div>
+        ) : !hydrated || lines.length === 0 ? (
           <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
             <ShoppingBag className="size-10 opacity-40" />
             <p>Tu carrito está vacío.</p>
@@ -99,7 +131,17 @@ export function CartDrawer({
         ) : step === 'checkout' ? (
           <ScrollArea className="min-h-0 flex-1 px-4">
             <div className="pb-6">
-              <CheckoutForm onBack={() => setStep('cart')} onPlaced={handlePlaced} />
+              {/* The only react-query consumer in the app, so the client lives
+                  here instead of in the root layout. Mounted with the checkout
+                  step, which also means its cache dies when the drawer closes —
+                  fine: the totals preview must be re-fetched anyway. */}
+              <QueryProvider>
+                <CheckoutForm
+                  options={checkoutOptions}
+                  onBack={() => setStep('cart')}
+                  onPlaced={handlePlaced}
+                />
+              </QueryProvider>
             </div>
           </ScrollArea>
         ) : (
@@ -110,7 +152,13 @@ export function CartDrawer({
                   <li key={line.cartItemId} className="flex gap-3 py-4">
                     <div className="bg-muted relative size-16 shrink-0 overflow-hidden rounded-lg">
                       {line.image && (
-                        <Image src={line.image} alt={line.name} fill className="object-cover" sizes="64px" />
+                        <Image
+                          src={line.image}
+                          alt={line.name}
+                          fill
+                          className="object-cover"
+                          sizes="64px"
+                        />
                       )}
                     </div>
                     <div className="flex flex-1 flex-col gap-1">
@@ -170,9 +218,7 @@ export function CartDrawer({
                               className="flex flex-wrap gap-1 pt-1.5"
                             >
                               {(addOnsByProduct[line.productId] ?? []).map((addOn) => {
-                                const picked = line.extras.some(
-                                  (e) => e.extraId === addOn.extraId,
-                                );
+                                const picked = line.extras.some((e) => e.extraId === addOn.extraId);
                                 return (
                                   <button
                                     key={addOn.extraId}
@@ -207,7 +253,9 @@ export function CartDrawer({
                           >
                             <Minus className="size-3" />
                           </Button>
-                          <span className="w-6 text-center text-sm tabular-nums">{line.quantity}</span>
+                          <span className="w-6 text-center text-sm tabular-nums">
+                            {line.quantity}
+                          </span>
                           <Button
                             variant="ghost"
                             size="icon-xs"

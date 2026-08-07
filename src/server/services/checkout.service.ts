@@ -1,16 +1,26 @@
 import 'server-only';
 
-import { prisma } from '@/lib/db/prisma';
 import { priceCart, type CheckoutPricingInput } from '@/server/services/pricing.service';
 import { getOpenState } from '@/server/services/schedule.service';
+import { getCurrentCustomer } from '@/server/services/customer-auth.service';
 import { orderRepository } from '@/server/repositories/order.repository';
 import { counterRepository } from '@/server/repositories/counter.repository';
 import { customerRepository } from '@/server/repositories/customer.repository';
 import { couponRepository } from '@/server/repositories/promotion.repository';
-import { communeRepository, paymentMethodRepository } from '@/server/repositories/operations.repository';
+import {
+  communeRepository,
+  paymentMethodRepository,
+} from '@/server/repositories/operations.repository';
 import { settingsRepository } from '@/server/repositories/operations.repository';
+import { withTransaction } from '@/server/repositories/transaction.repository';
 import { BusinessRuleError, NotFoundError } from '@/lib/errors';
-import { sanitizeMultiline, sanitizePhone, sanitizeText, sanitizeEmail } from '@/lib/security/sanitize';
+import {
+  sanitizeMultiline,
+  sanitizePhone,
+  sanitizeText,
+  sanitizeEmail,
+} from '@/lib/security/sanitize';
+import { buildWhatsAppOrderUrl } from '@/lib/whatsapp-order-message';
 import { nonNegative } from '@/lib/money';
 import type { CheckoutInput } from '@/schemas/checkout.schema';
 
@@ -37,7 +47,9 @@ export async function placeOrder(input: CheckoutInput) {
   const settings = await settingsRepository.get();
 
   if (input.orderType === 'DELIVERY' && !settings.deliveryEnabled) {
-    throw new BusinessRuleError('El delivery no está disponible en este momento. Puedes retirar en tienda.');
+    throw new BusinessRuleError(
+      'El delivery no está disponible en este momento. Puedes retirar en tienda.',
+    );
   }
 
   const paymentMethod = await paymentMethodRepository.findById(input.paymentMethodId);
@@ -60,34 +72,49 @@ export async function placeOrder(input: CheckoutInput) {
 
   const priced = await priceCart(pricingInput);
 
-  if (paymentMethod.requiresChange && input.cashGiven !== undefined && input.cashGiven < priced.total) {
+  if (
+    paymentMethod.requiresChange &&
+    input.cashGiven !== undefined &&
+    input.cashGiven < priced.total
+  ) {
     throw new BusinessRuleError('El monto entregado es menor al total del pedido.');
   }
 
-  const commune = input.orderType === 'DELIVERY' && input.communeId
-    ? await communeRepository.findById(input.communeId)
-    : null;
+  const commune =
+    input.orderType === 'DELIVERY' && input.communeId
+      ? await communeRepository.findById(input.communeId)
+      : null;
 
   const phone = sanitizePhone(input.phone);
   const firstName = sanitizeText(input.firstName, 60);
   const lastName = sanitizeText(input.lastName, 60);
   const email = input.email ? sanitizeEmail(input.email) : undefined;
 
-  const order = await prisma.$transaction(async (tx) => {
+  // A signed-in customer owns the order regardless of the phone typed into the
+  // form, so editing that field cannot move the purchase onto someone else's
+  // history. Guests keep the phone-keyed upsert.
+  const session = await getCurrentCustomer();
+
+  const estimatedMinutes =
+    input.orderType === 'DELIVERY'
+      ? settings.deliveryEtaMinutes + (commune?.extraMinutes ?? 0)
+      : settings.pickupEtaMinutes;
+
+  const cashGiven = paymentMethod.requiresChange ? input.cashGiven : undefined;
+  const changeDue = cashGiven !== undefined ? nonNegative(cashGiven - priced.total) : undefined;
+
+  const order = await withTransaction(async (tx) => {
     const sequence = await counterRepository.next('order-code', tx);
     const code = buildOrderCode(sequence);
 
-    const customer = await customerRepository.upsertByPhone(phone, {
-      firstName,
-      lastName,
-      phone,
-      email,
-    });
-
-    const estimatedMinutes =
-      input.orderType === 'DELIVERY'
-        ? settings.deliveryEtaMinutes + (commune?.extraMinutes ?? 0)
-        : settings.pickupEtaMinutes;
+    const customer =
+      session ??
+      (await customerRepository.upsertByPhone(phone, {
+        firstName,
+        lastName,
+        phone,
+        email,
+      }));
 
     const created = await orderRepository.create(
       {
@@ -108,10 +135,8 @@ export async function placeOrder(input: CheckoutInput) {
         discountTotal: priced.promotionDiscount + priced.couponDiscount,
         deliveryFee: priced.deliveryFee,
         total: priced.total,
-        cashGiven: paymentMethod.requiresChange ? input.cashGiven : undefined,
-        changeDue: paymentMethod.requiresChange && input.cashGiven
-          ? nonNegative(input.cashGiven - priced.total)
-          : undefined,
+        cashGiven,
+        changeDue,
         paymentMethod: { connect: { id: paymentMethod.id } },
         coupon: priced.couponId ? { connect: { id: priced.couponId } } : undefined,
         promotion: priced.promotionId ? { connect: { id: priced.promotionId } } : undefined,
@@ -179,5 +204,36 @@ export async function placeOrder(input: CheckoutInput) {
     return created;
   });
 
-  return order;
+  // Built here, from the priced order, so the operator reads exactly what the
+  // row says. The browser only opens the link — it never composes the message.
+  const whatsappUrl = buildWhatsAppOrderUrl(settings.whatsapp, {
+    code: order.code,
+    firstName,
+    lastName,
+    phone,
+    orderType: input.orderType,
+    street: input.orderType === 'DELIVERY' ? input.street : undefined,
+    reference: input.reference,
+    communeName: commune?.name,
+    paymentMethodName: paymentMethod.name,
+    cashGiven,
+    changeDue,
+    notes: input.notes,
+    subtotal: priced.subtotal,
+    discount: priced.promotionDiscount + priced.couponDiscount,
+    deliveryFee: priced.deliveryFee,
+    total: priced.total,
+    estimatedMinutes,
+    items: priced.items.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      lineTotal: item.lineTotal,
+      variants: item.variants.map((variant) => ({ optionName: variant.optionName })),
+      extras: item.extras.map((extra) => ({ name: extra.name, quantity: extra.quantity })),
+      removedIngredientNames: item.removedIngredientNames,
+      notes: item.notes,
+    })),
+  });
+
+  return { order, whatsappUrl };
 }

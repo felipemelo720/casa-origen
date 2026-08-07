@@ -8,45 +8,22 @@ import { checkoutSchema } from '@/schemas/checkout.schema';
 import { cartSchema } from '@/schemas/cart.schema';
 import { placeOrder } from '@/server/services/checkout.service';
 import { priceCart } from '@/server/services/pricing.service';
-import {
-  communeRepository,
-  paymentMethodRepository,
-  settingsRepository,
-} from '@/server/repositories/operations.repository';
 
-/**
- * Communes, payment methods, WhatsApp number and the delivery kill switch —
- * everything the cart drawer needs to render checkout. `deliveryEnabled` only
- * hides the option in the UI; `placeOrder` re-checks it server-side.
- */
-export const getCheckoutOptionsAction = publicAction(
-  { name: 'checkout.getOptions', rateLimit: { limit: 60, windowMs: 60_000 } },
-  z.void(),
-  async () => {
-    const [communes, paymentMethods, settings] = await Promise.all([
-      communeRepository.findAllActive(),
-      paymentMethodRepository.findAllActive(),
-      settingsRepository.get(),
-    ]);
-    return {
-      communes,
-      paymentMethods,
-      whatsapp: settings.whatsapp,
-      deliveryEnabled: settings.deliveryEnabled,
-    };
-  },
-);
+// `getCheckoutOptionsAction` used to live here. Communes, payment methods and
+// the delivery kill switch are already loaded by the storefront layout, so the
+// drawer gets them as props (`buildCheckoutOptions`) instead of paying a
+// round trip the moment the checkout step opens.
 
 export const placeOrderAction = publicAction(
   { name: 'checkout.placeOrder', rateLimit: { limit: 8, windowMs: 60_000 } },
   checkoutSchema,
   async (input) => {
-    const order = await placeOrder(input);
+    const { order, whatsappUrl } = await placeOrder(input);
 
     revalidateTag('products');
     revalidateTag('orders');
 
-    return { code: order.code, id: order.id, total: order.total };
+    return { code: order.code, id: order.id, total: order.total, whatsappUrl };
   },
 );
 
