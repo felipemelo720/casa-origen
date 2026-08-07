@@ -1,7 +1,9 @@
 import 'server-only';
 
 import { businessHourRepository } from '@/server/repositories/operations.repository';
+import { scheduleRepository } from '@/server/repositories/schedule.repository';
 import { settingsRepository } from '@/server/repositories/operations.repository';
+import type { BusinessHoursInput } from '@/schemas/schedule.schema';
 
 export type OpenState = {
   isOpen: boolean;
@@ -79,4 +81,11 @@ function minutesToLocalTime(minutes: number): string {
   const hours = Math.floor(minutes / 60) % 24;
   const mins = minutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+}
+
+/**
+ * Update all 7 business hours. Called from admin action with validated input.
+ */
+export async function updateBusinessHours(days: BusinessHoursInput) {
+  return scheduleRepository.upsertBusinessHours(days);
 }

@@ -1,0 +1,100 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('server-only', () => ({}));
+
+vi.mock('@/server/repositories/operations.repository', () => ({
+  businessHourRepository: { findAll: vi.fn() },
+  settingsRepository: { get: vi.fn() },
+}));
+
+vi.mock('@/server/repositories/schedule.repository', () => ({
+  scheduleRepository: { upsertBusinessHours: vi.fn() },
+}));
+
+import { getOpenState, getWeeklySchedule, updateBusinessHours } from './schedule.service';
+import {
+  businessHourRepository,
+  settingsRepository,
+} from '@/server/repositories/operations.repository';
+import { scheduleRepository } from '@/server/repositories/schedule.repository';
+
+const findAllHours = vi.mocked(businessHourRepository.findAll);
+const getSettings = vi.mocked(settingsRepository.get);
+const upsertBusinessHours = vi.mocked(scheduleRepository.upsertBusinessHours);
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
+
+describe('getOpenState', () => {
+  it('is open when acceptingOrders is true, no reason attached', async () => {
+    getSettings.mockResolvedValue({ acceptingOrders: true } as never);
+    const state = await getOpenState();
+    expect(state).toEqual({ isOpen: true });
+  });
+
+  it('is closed with the admin-set message when acceptingOrders is false', async () => {
+    getSettings.mockResolvedValue({
+      acceptingOrders: false,
+      closedMessage: 'Cerrado por mantención hasta las 18:00.',
+    } as never);
+    const state = await getOpenState();
+    expect(state).toEqual({ isOpen: false, reason: 'Cerrado por mantención hasta las 18:00.' });
+  });
+
+  it('falls back to a default reason when closedMessage is unset', async () => {
+    getSettings.mockResolvedValue({ acceptingOrders: false, closedMessage: null } as never);
+    const state = await getOpenState();
+    expect(state.isOpen).toBe(false);
+    expect(state.reason).toBe('Estamos cerrados temporalmente.');
+  });
+
+  it('does not consult business_hours — acceptingOrders is the only gate', async () => {
+    getSettings.mockResolvedValue({ acceptingOrders: true } as never);
+    await getOpenState();
+    expect(findAllHours).not.toHaveBeenCalled();
+  });
+});
+
+describe('getWeeklySchedule', () => {
+  it('always returns 7 rows, Monday first', async () => {
+    findAllHours.mockResolvedValue([]);
+    const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00')); // a Thursday
+    expect(week).toHaveLength(7);
+    expect(week.map((d) => d.dayOfWeek)).toEqual([1, 2, 3, 4, 5, 6, 0]);
+  });
+
+  it('reports a day missing from business_hours as closed, not omitted', async () => {
+    findAllHours.mockResolvedValue([]);
+    const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
+    expect(week.every((d) => d.isClosed)).toBe(true);
+  });
+
+  it('formats stored minutes as HH:mm', async () => {
+    findAllHours.mockResolvedValue([
+      { dayOfWeek: 1, isClosed: false, opensAt: 570, closesAt: 1320 }, // 09:30–22:00
+    ] as never);
+    const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
+    const monday = week.find((d) => d.dayOfWeek === 1);
+    expect(monday?.opensAt).toBe('09:30');
+    expect(monday?.closesAt).toBe('22:00');
+    expect(monday?.isClosed).toBe(false);
+  });
+
+  it('flags only today as isToday', async () => {
+    findAllHours.mockResolvedValue([]);
+    // 2026-08-06 is a Thursday (dayOfWeek 4)
+    const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
+    expect(week.find((d) => d.isToday)?.dayOfWeek).toBe(4);
+    expect(week.filter((d) => d.isToday)).toHaveLength(1);
+  });
+});
+
+describe('updateBusinessHours', () => {
+  it('delegates straight to the repository', async () => {
+    const days = [{ dayOfWeek: 'MONDAY' as const, opensAt: '09:00', closesAt: '18:00' }];
+    upsertBusinessHours.mockResolvedValue([]);
+    await updateBusinessHours(days);
+    expect(upsertBusinessHours).toHaveBeenCalledWith(days);
+  });
+});
