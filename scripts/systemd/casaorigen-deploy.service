@@ -1,0 +1,24 @@
+[Unit]
+Description=Casa Origen — pull-based deploy (git + CI check + rebuild)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/var/www/casa-origen
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HOME=/root
+Environment=NODE_ENV=production
+ExecStart=/var/www/casa-origen/scripts/deploy.sh
+
+# A build on 2 vCPU with production apps alongside it must not starve them.
+Nice=10
+IOSchedulingClass=idle
+
+# `npm run build` on this box takes a couple of minutes; anything past ten is
+# hung, and a hung deploy holds the lock against every later tick.
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

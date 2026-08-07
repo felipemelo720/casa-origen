@@ -1,0 +1,13 @@
+[Unit]
+Description=Check GitHub for a new green main every 5 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+# Spread the wake-ups so the check never lands on the same second as other
+# timers on this container.
+RandomizedDelaySec=30
+Unit=casaorigen-deploy.service
+
+[Install]
+WantedBy=timers.target
