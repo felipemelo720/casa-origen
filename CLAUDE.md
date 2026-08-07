@@ -1,9 +1,9 @@
 # Casa Origen
 
-dame outputs y respuestas de menos de 300 caracteres. 
+dame outputs y respuestas de menos de 300 caracteres.
 
 Pedidos de pizza. Next.js 15 App Router + TypeScript + Prisma + Postgres.
-Dos páginas: `/` (landing + carrito + checkout) y `/admin`.
+Tres páginas: `/` (landing + carrito + checkout), `/cuenta` y `/admin`.
 Plan y estado detallado en `PLAN.md`.
 
 Las secciones de la landing viven en `src/features/storefront/` y son
@@ -34,6 +34,9 @@ Código, comandos y errores exactos, verbatim.
 - Prisma solo desde `src/server/repositories/` (regla ESLint).
 - Admin = password único compartido (`ADMIN_PASSWORD` + cookie). No
   reintroducir RBAC sin necesidad real.
+- Cliente = email + password, cookie `customer_session` firmada con
+  `AUTH_SECRET` (nunca con `ADMIN_PASSWORD`). El guest checkout se mantiene:
+  la cuenta nunca puede ser requisito para pedir.
 - Pedido = fila en Postgres + link a WhatsApp. WhatsApp es aviso, no fuente
   de verdad.
 - Toda validación de negocio se repite server-side. Esconder algo en la UI

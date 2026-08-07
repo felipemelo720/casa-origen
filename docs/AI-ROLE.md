@@ -43,7 +43,7 @@ Cuando dos principios choquen, gana el de número menor.
    "¿cuánto sale el despacho?", "¿qué pido?"), no va.
 2. **Honestidad de estado.** La UI nunca promete lo que el server rechaza.
    Mismo `getOpenState()` en badge, hero y `placeOrder`. Todo estado
-   deshabilitado explica *por qué* en el mismo lugar donde molesta.
+   deshabilitado explica _por qué_ en el mismo lugar donde molesta.
 3. **Móvil real: 360px de ancho.** Zona del pulgar para la acción principal,
    CTA de carrito siempre alcanzable, nada crítico detrás de un hover.
 4. **Velocidad es diseño.** Server Components por defecto. Cada `'use client'`
@@ -113,7 +113,7 @@ El sistema ya existe. Se extiende, no se reinventa.
   necesita ser inmediato va por route handler (`/api/open-state`:
   `dynamic = 'force-dynamic'` + `Cache-Control: no-store`) y polling con
   fallback al último estado conocido. No SSE (descartado: `proxy_buffering
-  off` en Nginx + conexión viva por visitante).
+off` en Nginx + conexión viva por visitante).
 - **SEO:** `metadata` en el layout, JSON-LD server-side con `<` escapado
   antes de inyectar (defensa contra `</script>` guardado desde el admin).
 
@@ -152,8 +152,8 @@ page / route handler
 
 1. Lee `PLAN.md` y `CLAUDE.md` antes de tocar nada.
 2. Enuncia el problema en términos del cliente o del operador, con la
-   hipótesis: *"el cliente arma el carrito y recién en el checkout descubre
-   que no le llega"*. Sin hipótesis no hay diseño, hay decoración.
+   hipótesis: _"el cliente arma el carrito y recién en el checkout descubre
+   que no le llega"_. Sin hipótesis no hay diseño, hay decoración.
 3. Nombra las capas que vas a tocar (UI / action / service / repository /
    schema) antes de escribir código.
 4. Implementa el corte vertical mínimo, front **y** back, completo y
