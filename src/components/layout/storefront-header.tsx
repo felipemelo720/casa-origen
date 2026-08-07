@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Clock, MapPin, Menu, MessageCircle, Phone, Pizza, ShoppingBag, User } from 'lucide-react';
+import { Clock, Menu, MessageCircle, Phone, Pizza, ShoppingBag, User } from 'lucide-react';
 
 import { BrandMark } from '@/components/layout/brand-mark';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,11 @@ import { formatMoney } from '@/lib/money';
 import type { OpenState } from '@/server/services/schedule.service';
 import { cn } from '@/lib/utils';
 
-/** Every href is an anchor that exists in `(storefront)/page.tsx`. */
+/**
+ * Every href is an anchor that exists in `(storefront)/page.tsx`, and *only*
+ * there. The header also renders on `/cuenta`, where a bare `#menu` resolves to
+ * `/cuenta#menu` and silently does nothing — see `hrefFor()`.
+ */
 const NAV_LINKS = [
   { href: '#menu', label: 'Menú' },
   { href: '#cobertura', label: 'Cobertura' },
@@ -43,7 +48,6 @@ type Props = {
   phone: string | null;
   /** Ready-to-use `wa.me` link, or null when no number is configured. */
   whatsappUrl: string | null;
-  address: string | null;
   open: OpenState;
   /** Today's advertised row of `business_hours`; null if the day is missing. */
   todayHours: HeaderTodayHours | null;
@@ -54,7 +58,6 @@ export function StorefrontHeader({
   logo,
   phone,
   whatsappUrl,
-  address,
   open: initialOpen,
   todayHours,
 }: Props) {
@@ -63,6 +66,10 @@ export function StorefrontHeader({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [openState, setOpenState] = useState(initialOpen);
   const [mounted, setMounted] = useState(false);
+
+  // The header is shared by the whole `(storefront)` group, but the sections it
+  // links to only exist on `/`.
+  const isHome = usePathname() === '/';
 
   const openCart = useCartStore((state) => state.open);
   const count = useCartCount();
@@ -171,13 +178,10 @@ export function StorefrontHeader({
               )}
             </p>
 
+            {/* Contact only: hours, phone, WhatsApp. The street address is not
+                published anywhere in the storefront chrome — the shop sells by
+                delivery and pickup arranged over WhatsApp. */}
             <div className="flex items-center gap-4">
-              {address && (
-                <span className="hidden items-center gap-1.5 lg:flex">
-                  <MapPin className="size-3.5 shrink-0" aria-hidden />
-                  {address}
-                </span>
-              )}
               {phone && (
                 <a
                   href={`tel:${phone.replace(/[^\d+]/g, '')}`}
@@ -202,10 +206,13 @@ export function StorefrontHeader({
           </div>
         </div>
 
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-3 sm:px-6 lg:px-8">
           <Link
             href="/"
-            className="flex min-w-0 items-center gap-2.5"
+            // `overflow-hidden` on purpose: on a 360px phone the row is
+            // tight, and the brand is the one element allowed to give way
+            // instead of spilling over the badge beside it.
+            className="flex min-w-0 shrink items-center gap-2.5 overflow-hidden"
             aria-label={`${restaurantName}, ir al inicio`}
           >
             {logo ? (
@@ -229,11 +236,12 @@ export function StorefrontHeader({
 
           <nav aria-label="Secciones" className="mx-auto hidden items-center gap-1 md:flex">
             {NAV_LINKS.map((link) => {
-              const isActive = activeId === link.href.slice(1);
+              const isActive = isHome && activeId === link.href.slice(1);
               return (
-                <a
+                <SectionLink
                   key={link.href}
-                  href={link.href}
+                  hash={link.href}
+                  isHome={isHome}
                   aria-current={isActive ? 'true' : undefined}
                   className={cn(
                     'rounded-md px-3 py-2 text-sm font-medium transition-colors',
@@ -243,7 +251,7 @@ export function StorefrontHeader({
                   )}
                 >
                   {link.label}
-                </a>
+                </SectionLink>
               );
             })}
           </nav>
@@ -251,7 +259,7 @@ export function StorefrontHeader({
           <div className="ml-auto flex items-center gap-1 md:ml-0">
             {/* A route, not an anchor: the account page reads a session cookie
                 and cannot live on the static landing. */}
-            <Button variant="ghost" size="icon" asChild>
+            <Button variant="ghost" size="icon" className="size-8 sm:size-9" asChild>
               <Link href="/cuenta" aria-label="Mi cuenta">
                 <User className="size-4" aria-hidden />
               </Link>
@@ -262,7 +270,7 @@ export function StorefrontHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="relative"
+              className="relative size-8 sm:size-9"
               onClick={openCart}
               aria-label={cartLabel}
             >
@@ -291,7 +299,12 @@ export function StorefrontHeader({
 
             <Sheet open={navOpen} onOpenChange={setNavOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden" aria-label="Abrir menú">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9 md:hidden"
+                  aria-label="Abrir menú"
+                >
                   <Menu className="size-4" aria-hidden />
                 </Button>
               </SheetTrigger>
@@ -311,16 +324,17 @@ export function StorefrontHeader({
 
                 <nav aria-label="Secciones" className="flex flex-col p-3">
                   {NAV_LINKS.map((link) => (
-                    <a
+                    <SectionLink
                       key={link.href}
-                      href={link.href}
+                      hash={link.href}
+                      isHome={isHome}
                       // Without this the sheet stays over the section it just
                       // scrolled to.
                       onClick={() => setNavOpen(false)}
                       className="hover:bg-secondary rounded-md px-3 py-2.5 text-base font-medium transition-colors"
                     >
                       {link.label}
-                    </a>
+                    </SectionLink>
                   ))}
                 </nav>
 
@@ -335,12 +349,6 @@ export function StorefrontHeader({
                       <Phone className="size-4 shrink-0" aria-hidden />
                       {phone}
                     </a>
-                  )}
-                  {address && (
-                    <p className="text-muted-foreground flex items-start gap-2">
-                      <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
-                      {address}
-                    </p>
                   )}
                   {whatsappUrl && (
                     <Button asChild className="w-full">
@@ -357,6 +365,39 @@ export function StorefrontHeader({
         </div>
       </header>
     </>
+  );
+}
+
+/**
+ * A link to a section of the landing, from anywhere in the storefront.
+ *
+ * On `/` it stays a plain anchor: the native in-page jump already works and
+ * `scroll-mt-*` on each section handles the sticky header. On `/cuenta` the
+ * same bare hash would resolve against a page that has no such id, so the href
+ * becomes `/#…` and the click turns into a client-side navigation home.
+ */
+function SectionLink({
+  hash,
+  isHome,
+  children,
+  ...props
+}: {
+  /** Anchor including the `#`, e.g. `#menu`. */
+  hash: string;
+  isHome: boolean;
+  children: React.ReactNode;
+} & Omit<React.ComponentPropsWithoutRef<'a'>, 'href'>) {
+  if (isHome) {
+    return (
+      <a href={hash} {...props}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={`/${hash}`} {...props}>
+      {children}
+    </Link>
   );
 }
 

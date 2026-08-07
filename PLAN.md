@@ -766,10 +766,106 @@ tests) limpios. `GET /` 200, HTML sin `unsplash` y con el copy nuevo. Falta el
 QA en navegador (360px, dark, teclado), que sigue pendiente junto al del paso
 `'placed'`.
 
+## `/admin` a 360px: overflow y objetivos táctiles (2026-08-07)
+
+**Problema del operador.** El panel se opera desde el teléfono con las manos
+ocupadas, pero estaba dimensionado para pantalla ancha. A 360px el ancho útil
+real es 280px (main `px-4` → 328, section `p-6` → 280) y varios bloques pedían
+más, con scroll horizontal y botones de 32px.
+
+Cuatro arreglos, todos en `src/app/(admin)/admin/page.tsx` y
+`src/features/admin/stat-card.tsx`:
+
+1. **Stats.** `grid-cols-3` daba 85px por columna contra una card que necesita
+   ~100px solo de padding + icono. Ahora es una columna (`space-y-2`) con
+   `StatCard` en fila slim: icono `size-9`, valor a la derecha con
+   `tabular-nums`. No se dejó `sm:grid-cols-3` porque el contenedor es
+   `max-w-lg`: incluso en desktop tocan 145px por columna y volvía a romper.
+2. **Horarios.** La fila medía 310px (`w-20` + 2×`w-24` + gaps). Pasa a
+   `grid-cols-[4.5rem_1fr]` con los dos `input[type=time]` en `flex-1 min-w-0`,
+   así el ancho lo pone el contenedor y no el input.
+3. **Toggles de negocio y delivery.** Los pares abrir/cerrar y
+   activar/desactivar tenían siempre un botón `disabled`, ocupaban 134px cada
+   uno y "Desactivar delivery" desbordaba (los botones son
+   `whitespace-nowrap`). Ahora hay un solo botón que muestra la acción
+   contraria al estado actual.
+4. **Objetivos táctiles.** Los botones del menú eran `size="sm"` (`h-8`, 32px).
+   Estrella pasa a `size-11` con `aria-label`, agotar/activar a `h-11`, y
+   también los inputs de hora y "Guardar horarios".
+
+**Tradeoff.** Las stats ahora ocupan tres filas en vez de una: ~120px más de
+scroll a cambio de que los montos se lean. Y con el toggle único se pierde la
+señal redundante del botón deshabilitado; el estado sigue explícito arriba
+(punto de color + ABIERTO/CERRADO), que es donde el operador lo mira.
+
+Aparte: `StatCard` pasó de `bg-card` a `bg-background` porque estaba dentro de
+una section `bg-card` y no se distinguía.
+
+**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios. **Sin
+`npm run build`**: hay dev server levantado. Pendiente el QA en navegador —
+este CT no tiene Chromium instalado. Sigue pendiente lo no pedido: los colores
+`green-500`/`red-600`/`amber-600` hardcodeados en el panel violan la regla de
+tokens y en dark el `text-*-600` queda bajo 4.5:1.
+
+## El día de la semana se calculaba en UTC (2026-08-07)
+
+**Hipótesis.** El cliente entra a las 21:00 un viernes, la barra del header le
+dice «Hoy atendemos de 12:00 a 23:00» —el horario del sábado— y un domingo a
+las 20:00 le dice «Hoy sin horario publicado» con el local abierto, porque lee
+la fila del lunes, que está cerrado.
+
+**Causa.** `schedule.service.ts` resolvía el día con `now.getDay()`, o sea el
+día del server. El CT corre en UTC (`timedatectl` → `UTC`) y el proceso pm2 no
+tiene `TZ` en el environment (verificado en `/proc/<pid>/environ`). Chile está
+en UTC-4: **de 20:00 a 23:59 hora local el server ya está en mañana**. La
+ventana rota es exactamente la hora peak de una pizzería.
+
+Alcance: `isToday` en `getWeeklySchedule()`, que alimenta la barra de utilidad
+del header, el sheet móvil, `opening-hours.tsx` y el footer.
+
+**Cambio.** `SHOP_TIME_ZONE = 'America/Santiago'` y `dayOfWeekInShopTime()` en
+`schedule.service.ts`, con `Intl.DateTimeFormat` en vez de `getDay()`. La
+timezone queda en el código, no en el environment: una env var arregla el
+síntoma pero se pierde en silencio la primera vez que alguien levante el
+proceso sin ella.
+
+Si `Intl` devolviera un weekday desconocido (inalcanzable con Node full-ICU)
+se loguea por `pino` y recién ahí cae a `now.getDay()`. El fallback no se
+traga el error, que es justo el modo de falla que este código existe para
+matar: un día equivocado en silencio.
+
+**Verificado.** Dos tests de regresión en `schedule.service.test.ts`
+(viernes 22:00 y domingo 21:00 en Paine, ambos ya en el día siguiente UTC).
+Ruta de fallo confirmada a mano, no asumida:
+
+```
+TZ=UTC node -e "..."  →  getDay UTC: 6 | Santiago: Fri
+```
+
+El código viejo devolvía 6 (sábado) donde el test espera 5 (viernes).
+`npx tsc --noEmit`, `npm run lint` y `npx vitest run` (142 tests) limpios.
+
+**Tradeoff.** La timezone queda hardcodeada. Es correcto mientras haya un solo
+local; un segundo local en otra región obliga a moverla a `Settings`.
+
+**Pendiente de este mismo hallazgo:** falta `TZ=America/Santiago` en el proceso
+pm2 como segunda línea de defensa. Todavía no aplicado porque implica reiniciar
+el sitio en producción. Sin eso, el resto de las fechas del server (la serie
+diaria de ventas de `/admin`, `createdAt` en `/cuenta`) siguen formateándose en
+UTC.
+
+**Sin desplegar.** El cambio está en el working tree; `casaorigenpizzas.cl`
+sigue sirviendo el build anterior.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros
 proyectos). `npm run dev` / `build` / `npx prisma studio` funcionan.
+
+**Producción en esta misma máquina:** pm2, app `casaorigen`,
+`npm start -- -p 3006`, cwd `/var/www/casa-origen`. Desplegar con
+`pm2 stop casaorigen && rm -rf .next && npm run build && pm2 start casaorigen`
+— el build no puede correr con `next start` vivo, le pisa `.next/`.
 
 `package.json` pide `next@^15.1.4` pero el rango ya resuelve a **15.5.22**.
 Si algo se rompe sin que nadie haya tocado el código, mirar ahí primero.

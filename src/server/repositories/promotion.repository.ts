@@ -47,26 +47,6 @@ export const couponRepository = {
   async findAllForAdmin() {
     return prisma.coupon.findMany({ orderBy: { createdAt: 'desc' } });
   },
-  /**
-   * The coupon advertised on the landing page: flagged public, live right now
-   * and not exhausted. Only codes explicitly marked `isPublic` are ever listed,
-   * so private codes stay redeemable at checkout without being given away.
-   */
-  async findPublicActive(now: Date = new Date()) {
-    const candidates = await prisma.coupon.findMany({
-      where: {
-        isPublic: true,
-        isActive: true,
-        startsAt: { lte: now },
-        OR: [{ endsAt: null }, { endsAt: { gte: now } }],
-      },
-      orderBy: { startsAt: 'desc' },
-    });
-
-    // `usageLimit` is nullable, so the "not exhausted" check cannot be expressed
-    // as a plain column comparison in the where clause.
-    return candidates.find((c) => c.usageLimit === null || c.usageCount < c.usageLimit) ?? null;
-  },
   async findById(id: string) {
     return prisma.coupon.findUnique({ where: { id } });
   },

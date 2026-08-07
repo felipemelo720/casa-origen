@@ -4,22 +4,30 @@ import {
   Facebook,
   Instagram,
   Mail,
-  MapPin,
   MessageCircle,
   Phone,
   Pizza,
   Store,
 } from 'lucide-react';
 
+import Link from 'next/link';
+
 import { BrandMark } from '@/components/layout/brand-mark';
 import type { ScheduleDay } from '@/server/services/schedule.service';
 import { cn } from '@/lib/utils';
 
+/**
+ * Absolute, not a bare `#menu`: the footer renders on every `(storefront)`
+ * page, and these sections only exist on `/`. From `/cuenta` a bare hash
+ * resolves to `/cuenta#menu`, an id that is not there, and the click does
+ * nothing. This is a server component, so it cannot branch on `usePathname()`
+ * the way the header does — `/#…` is correct from both pages.
+ */
 const FOOTER_LINKS = [
-  { href: '#menu', label: 'Nuestras pizzas' },
-  { href: '#cobertura', label: 'Zonas de despacho' },
-  { href: '#como-pedir', label: 'Cómo pedir' },
-  { href: '#horarios', label: 'Horarios' },
+  { href: '/#menu', label: 'Nuestras pizzas' },
+  { href: '/#cobertura', label: 'Zonas de despacho' },
+  { href: '/#como-pedir', label: 'Cómo pedir' },
+  { href: '/#horarios', label: 'Horarios' },
 ] as const;
 
 type Props = {
@@ -30,7 +38,6 @@ type Props = {
   email: string | null;
   /** Ready-to-use `wa.me` link, or null when no number is configured. */
   whatsappUrl: string | null;
-  address: string | null;
   instagramUrl: string | null;
   facebookUrl: string | null;
   schedule: ScheduleDay[];
@@ -52,7 +59,6 @@ export function StorefrontFooter({
   phone,
   email,
   whatsappUrl,
-  address,
   instagramUrl,
   facebookUrl,
   schedule,
@@ -61,9 +67,6 @@ export function StorefrontFooter({
   pickupEtaMinutes,
 }: Props) {
   const telHref = phone ? `tel:${phone.replace(/[^\d+]/g, '')}` : null;
-  const mapsHref = address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
-    : null;
 
   return (
     <footer className="border-border bg-secondary/40 mt-24 border-t">
@@ -162,20 +165,6 @@ export function StorefrontFooter({
                 </a>
               </li>
             )}
-            {address && (
-              <li>
-                {/* A dead-end address is useless on a phone: link it to maps. */}
-                <a
-                  href={mapsHref ?? undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:text-primary flex items-start gap-2"
-                >
-                  <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
-                  {address}
-                </a>
-              </li>
-            )}
           </ul>
         </div>
 
@@ -184,9 +173,9 @@ export function StorefrontFooter({
           <ul className="text-muted-foreground space-y-2.5 text-sm">
             {FOOTER_LINKS.map((link) => (
               <li key={link.href}>
-                <a href={link.href} className="hover:text-primary">
+                <Link href={link.href} className="hover:text-primary">
                   {link.label}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>

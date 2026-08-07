@@ -4,6 +4,7 @@ import { businessHourRepository } from '@/server/repositories/operations.reposit
 import { scheduleRepository } from '@/server/repositories/schedule.repository';
 import { settingsRepository } from '@/server/repositories/operations.repository';
 import type { BusinessHoursInput } from '@/schemas/schedule.schema';
+import { logger } from '@/lib/logger';
 
 export type OpenState = {
   isOpen: boolean;
@@ -35,6 +36,50 @@ const DAY_LABELS = [
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 
 /**
+ * The shop is in Paine; the box it runs on is UTC.
+ *
+ * `Date#getDay()` answers with the *server's* day. Chile is UTC-4, so from
+ * 20:00 local onwards the server is already on tomorrow — the header would
+ * advertise tomorrow's hours during the dinner rush, and on a Sunday night it
+ * would read Monday's closed row and claim there is no schedule while the shop
+ * is open. Setting `TZ` on the process fixes it too, but silently and only
+ * until someone starts the app without it, so the day is resolved explicitly
+ * here and the env var is only a second line of defence.
+ */
+export const SHOP_TIME_ZONE = 'America/Santiago';
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+const shopWeekdayFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: SHOP_TIME_ZONE,
+  weekday: 'short',
+});
+
+/** `Date#getDay()`, but in the shop's timezone instead of the server's. */
+export function dayOfWeekInShopTime(now: Date): number {
+  const weekday = shopWeekdayFormatter.format(now);
+  const index = WEEKDAY_INDEX[weekday];
+
+  if (index === undefined) {
+    // Unreachable with a full-ICU Node ('en-US' short weekdays are fixed), but
+    // the failure this guards against is a *silently* wrong day, so it gets
+    // logged rather than swallowed before falling back to the server's clock.
+    logger.error({ weekday, timeZone: SHOP_TIME_ZONE }, 'Unrecognised weekday from Intl');
+    return now.getDay();
+  }
+
+  return index;
+}
+
+/**
  * Whether the restaurant can currently accept an order.
  *
  * The `acceptingOrders` switch in /admin decides on its own: flipping it open
@@ -61,7 +106,7 @@ export async function getOpenState(): Promise<OpenState> {
  */
 export async function getWeeklySchedule(now: Date = new Date()): Promise<ScheduleDay[]> {
   const hours = await businessHourRepository.findAll();
-  const today = now.getDay();
+  const today = dayOfWeekInShopTime(now);
 
   return WEEK_ORDER.map((dayOfWeek) => {
     const day = hours.find((h) => h.dayOfWeek === dayOfWeek);

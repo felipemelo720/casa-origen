@@ -63,7 +63,6 @@ export default async function StorefrontLayout({ children }: { children: React.R
         logo={settings.logo}
         phone={settings.phone}
         whatsappUrl={whatsappUrl}
-        address={settings.address}
         open={open}
         todayHours={todayHours}
       />
@@ -78,7 +77,6 @@ export default async function StorefrontLayout({ children }: { children: React.R
         phone={settings.phone}
         email={settings.email}
         whatsappUrl={whatsappUrl}
-        address={settings.address}
         instagramUrl={settings.instagramUrl}
         facebookUrl={settings.facebookUrl}
         schedule={schedule}

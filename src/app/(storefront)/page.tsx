@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 
 import { ClosedNotice } from '@/components/shared/closed-notice';
 import { ProductCard } from '@/features/catalog/product-card';
-import { CouponBanner } from '@/features/promo/coupon-banner';
 import { DeliveryChecker } from '@/features/delivery/delivery-checker';
 import { StorefrontHero } from '@/features/storefront/hero';
 import { HowToOrder } from '@/features/storefront/how-to-order';
@@ -10,7 +9,6 @@ import { OpeningHours } from '@/features/storefront/opening-hours';
 import { RestaurantJsonLd } from '@/features/storefront/restaurant-jsonld';
 import { TrustBar } from '@/features/storefront/trust-bar';
 import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
-import { couponRepository } from '@/server/repositories/promotion.repository';
 import { getOpenState, getWeeklySchedule } from '@/server/services/schedule.service';
 import {
   bannerRepository,
@@ -29,19 +27,17 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [settings, heroBanners, products, highlighted, coupon, zones, open, schedule] =
-    await Promise.all([
-      settingsRepository.get(),
-      bannerRepository.findActiveByPlacement('HERO'),
-      productRepository.findAllForMenu(),
-      productRepository.findHighlighted(HIGHLIGHTED_LIMIT),
-      couponRepository.findPublicActive(),
-      communeRepository.findAllActive(),
-      // The same check the checkout enforces, so the landing cannot invite an
-      // order that `placeOrder` will refuse a few clicks later.
-      getOpenState(),
-      getWeeklySchedule(),
-    ]);
+  const [settings, heroBanners, products, highlighted, zones, open, schedule] = await Promise.all([
+    settingsRepository.get(),
+    bannerRepository.findActiveByPlacement('HERO'),
+    productRepository.findAllForMenu(),
+    productRepository.findHighlighted(HIGHLIGHTED_LIMIT),
+    communeRepository.findAllActive(),
+    // The same check the checkout enforces, so the landing cannot invite an
+    // order that `placeOrder` will refuse a few clicks later.
+    getOpenState(),
+    getWeeklySchedule(),
+  ]);
 
   const hero = heroBanners[0];
 
@@ -83,15 +79,8 @@ export default async function HomePage() {
         deliveryEnabled={settings.deliveryEnabled}
         deliveryEtaMinutes={settings.deliveryEtaMinutes}
         pickupEtaMinutes={settings.pickupEtaMinutes}
-        freeDeliveryFrom={settings.freeDeliveryFrom}
         minOrderAmount={settings.minOrderAmount}
       />
-
-      {coupon && (
-        <section className="mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-8">
-          <CouponBanner coupon={coupon} />
-        </section>
-      )}
 
       {highlighted.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-8">

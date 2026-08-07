@@ -1,37 +1,44 @@
-import { Bike, Clock, Store, Wallet } from 'lucide-react';
+import { MapPin, Store, Wallet } from 'lucide-react';
+import type { ComponentType } from 'react';
 
+import { MotorcycleIcon } from '@/components/shared/motorcycle-icon';
 import { formatMoney } from '@/lib/money';
 
 type Props = {
   deliveryEnabled: boolean;
   deliveryEtaMinutes: number;
   pickupEtaMinutes: number;
-  freeDeliveryFrom: number;
   minOrderAmount: number;
 };
 
 /**
- * The four numbers that decide whether someone orders at all — ETA, free
- * delivery threshold and minimum. They live in settings but until now only
- * surfaced at checkout, once the customer had already done the choosing.
+ * The facts that decide whether someone orders at all — ETA, coverage and
+ * minimum. They live in settings but until now only surfaced at checkout, once
+ * the customer had already done the choosing.
  */
 export function TrustBar({
   deliveryEnabled,
   deliveryEtaMinutes,
   pickupEtaMinutes,
-  freeDeliveryFrom,
   minOrderAmount,
 }: Props) {
-  const items: { icon: typeof Bike; value: string; label: string }[] = [];
+  const items: {
+    icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
+    value: string;
+    label: string;
+  }[] = [];
 
   if (deliveryEnabled) {
-    items.push({ icon: Bike, value: `${deliveryEtaMinutes} min`, label: 'Despacho' });
+    items.push({ icon: MotorcycleIcon, value: `${deliveryEtaMinutes} min`, label: 'Despacho' });
   }
 
   items.push({ icon: Store, value: `${pickupEtaMinutes} min`, label: 'Retiro en tienda' });
 
-  if (deliveryEnabled && freeDeliveryFrom > 0) {
-    items.push({ icon: Clock, value: formatMoney(freeDeliveryFrom), label: 'Envío gratis desde' });
+  // Replaces the free-delivery threshold, which does not apply here. Coverage
+  // answers the same pre-cart objection ("¿me llega?") without promising a
+  // discount that checkout would not honour.
+  if (deliveryEnabled) {
+    items.push({ icon: MapPin, value: 'Paine', label: 'Zona de reparto' });
   }
 
   // Dropped entirely when there is no minimum, instead of printing "Sin
@@ -45,8 +52,11 @@ export function TrustBar({
       {/* Flex, not a fixed 4-column grid: the items are conditional (two of
           them disappear with delivery off), and a grid left an empty cell that
           pushed everything off-center. `flex-1` splits the row evenly for any
-          count, and each item centers inside its own share. */}
-      <div className="divide-border mx-auto flex max-w-7xl flex-wrap items-center gap-y-6 px-4 py-6 sm:divide-x sm:px-6 lg:px-8">
+          count, and each item centers inside its own share.
+          `justify-center` is for the odd count: with three items the mobile
+          row wraps and the leftover one sat alone in the left half, reading as
+          a broken layout. Centered, the orphan lines up under the pair. */}
+      <div className="divide-border mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-y-6 px-4 py-6 sm:divide-x sm:px-6 lg:px-8">
         {items.map((item) => (
           <div
             key={item.label}

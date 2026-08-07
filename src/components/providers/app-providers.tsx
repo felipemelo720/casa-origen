@@ -12,8 +12,16 @@ import { Toaster } from '@/components/ui/sonner';
  * on every route — /admin and /cuenta never query anything from the client.
  */
 export function AppProviders({ children }: { children: ReactNode }) {
+  // Light on arrival, not `system`: an Android phone in dark mode was served the
+  // dark palette on the first visit without ever being asked. The toggle still
+  // switches to dark and next-themes remembers the choice.
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      enableSystem={false}
+      disableTransitionOnChange
+    >
       <TooltipProvider delayDuration={200}>
         {children}
         <Toaster richColors closeButton position="top-center" />

@@ -11,6 +11,10 @@ vi.mock('@/server/repositories/schedule.repository', () => ({
   scheduleRepository: { upsertBusinessHours: vi.fn() },
 }));
 
+// `@/lib/logger` imports `@/config/env`, which throws unless the whole server
+// env is present. The service only logs on an unreachable branch.
+vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
+
 import { getOpenState, getWeeklySchedule, updateBusinessHours } from './schedule.service';
 import {
   businessHourRepository,
@@ -87,6 +91,23 @@ describe('getWeeklySchedule', () => {
     const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
     expect(week.find((d) => d.isToday)?.dayOfWeek).toBe(4);
     expect(week.filter((d) => d.isToday)).toHaveLength(1);
+  });
+
+  it('resolves today in Santiago, not on the UTC server', async () => {
+    findAllHours.mockResolvedValue([]);
+    // 22:00 on a Friday in Paine is already Saturday 02:00 UTC. `getDay()` on
+    // a UTC box answered 6, so every night from 20:00 the header advertised
+    // the next day's hours — in the middle of the dinner rush.
+    const week = await getWeeklySchedule(new Date('2026-08-08T02:00:00Z'));
+    expect(week.find((d) => d.isToday)?.dayOfWeek).toBe(5);
+  });
+
+  it('still resolves the previous day on a Sunday night', async () => {
+    findAllHours.mockResolvedValue([]);
+    // Sunday 21:00 in Paine = Monday 01:00 UTC. Monday is the closed day, so
+    // the old behaviour claimed "hoy sin horario publicado" with the shop open.
+    const week = await getWeeklySchedule(new Date('2026-08-10T01:00:00Z'));
+    expect(week.find((d) => d.isToday)?.dayOfWeek).toBe(0);
   });
 });
 

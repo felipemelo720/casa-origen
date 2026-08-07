@@ -105,28 +105,20 @@ export default async function AdminPage() {
               horario. Nada cierra solo.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <form action={toggleAcceptingOrdersAction.bind(null, true)}>
-              <Button
-                type="submit"
-                disabled={settings.acceptingOrders}
-                variant="outline"
-                className="w-full border-green-500/40 text-green-600 disabled:opacity-40"
-              >
-                Abrir negocio
-              </Button>
-            </form>
-            <form action={toggleAcceptingOrdersAction.bind(null, false)}>
-              <Button
-                type="submit"
-                disabled={!settings.acceptingOrders}
-                variant="outline"
-                className="w-full border-red-500/40 text-red-600 disabled:opacity-40"
-              >
-                Cerrar negocio
-              </Button>
-            </form>
-          </div>
+          <form action={toggleAcceptingOrdersAction.bind(null, !settings.acceptingOrders)}>
+            <Button
+              type="submit"
+              variant="outline"
+              className={cn(
+                'h-11 w-full',
+                settings.acceptingOrders
+                  ? 'border-red-500/40 text-red-600'
+                  : 'border-green-500/40 text-green-600',
+              )}
+            >
+              {settings.acceptingOrders ? 'Cerrar negocio' : 'Abrir negocio'}
+            </Button>
+          </form>
         </section>
 
         {/* Delivery */}
@@ -145,28 +137,20 @@ export default async function AdminPage() {
               </span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <form action={toggleDeliveryAction.bind(null, true)}>
-              <Button
-                type="submit"
-                disabled={settings.deliveryEnabled}
-                variant="outline"
-                className="w-full border-green-500/40 text-green-600 disabled:opacity-40"
-              >
-                Activar delivery
-              </Button>
-            </form>
-            <form action={toggleDeliveryAction.bind(null, false)}>
-              <Button
-                type="submit"
-                disabled={!settings.deliveryEnabled}
-                variant="outline"
-                className="w-full border-red-500/40 text-red-600 disabled:opacity-40"
-              >
-                Desactivar delivery
-              </Button>
-            </form>
-          </div>
+          <form action={toggleDeliveryAction.bind(null, !settings.deliveryEnabled)}>
+            <Button
+              type="submit"
+              variant="outline"
+              className={cn(
+                'h-11 w-full',
+                settings.deliveryEnabled
+                  ? 'border-red-500/40 text-red-600'
+                  : 'border-green-500/40 text-green-600',
+              )}
+            >
+              {settings.deliveryEnabled ? 'Desactivar delivery' : 'Activar delivery'}
+            </Button>
+          </form>
         </section>
 
         {/* Business hours */}
@@ -179,34 +163,34 @@ export default async function AdminPage() {
           </div>
           <form action={updateBusinessHoursAction} className="space-y-2">
             {weeklySchedule.map((day) => (
-              <div key={day.dayOfWeek} className="flex items-center gap-3">
-                <label className="text-muted-foreground w-20 text-sm font-medium">
-                  {day.label}
-                </label>
+              <div key={day.dayOfWeek} className="grid grid-cols-[4.5rem_1fr] items-center gap-3">
+                <span className="text-muted-foreground text-sm font-medium">{day.label}</span>
                 {day.isClosed ? (
                   <span className="text-muted-foreground text-sm">Cerrado</span>
                 ) : (
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Input
                       type="time"
                       name={`${day.dayOfWeek}_opensAt`}
                       defaultValue={day.opensAt}
-                      className="w-24"
+                      aria-label={`${day.label}: hora de apertura`}
+                      className="h-11 min-w-0 flex-1"
                       required
                     />
-                    <span className="text-muted-foreground">–</span>
+                    <span className="text-muted-foreground shrink-0">–</span>
                     <Input
                       type="time"
                       name={`${day.dayOfWeek}_closesAt`}
                       defaultValue={day.closesAt}
-                      className="w-24"
+                      aria-label={`${day.label}: hora de cierre`}
+                      className="h-11 min-w-0 flex-1"
                       required
                     />
                   </div>
                 )}
               </div>
             ))}
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="h-11 w-full">
               Guardar horarios
             </Button>
           </form>
@@ -263,12 +247,16 @@ export default async function AdminPage() {
                         >
                           <Button
                             type="submit"
-                            size="sm"
+                            size="icon"
                             variant="outline"
                             title={
                               product.isFeatured ? 'Quitar de destacados' : 'Destacar en la portada'
                             }
+                            aria-label={
+                              product.isFeatured ? 'Quitar de destacados' : 'Destacar en la portada'
+                            }
                             className={cn(
+                              'size-11',
                               product.isFeatured && 'border-amber-500/40 text-amber-600',
                             )}
                           >
@@ -284,9 +272,9 @@ export default async function AdminPage() {
                         >
                           <Button
                             type="submit"
-                            size="sm"
                             variant="outline"
                             className={cn(
+                              'h-11 px-3',
                               isUnavailable
                                 ? 'border-green-500/40 text-green-600'
                                 : 'border-red-500/40 text-red-600',
@@ -307,7 +295,7 @@ export default async function AdminPage() {
         {/* Stats */}
         <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
           <p className="text-muted-foreground text-xs tracking-widest uppercase">Últimos 7 días</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-2">
             <StatCard icon={DollarSign} label="Ventas" value={formatMoney(sales.revenue)} />
             <StatCard icon={ShoppingBag} label="Pedidos" value={String(sales.orderCount)} />
             <StatCard
@@ -320,13 +308,17 @@ export default async function AdminPage() {
             {dailySeries.map((day) => (
               <div
                 key={day.day.toISOString()}
-                className="flex items-center justify-between text-sm"
+                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm"
               >
-                <span className="text-muted-foreground">
+                <span className="text-muted-foreground truncate">
                   {day.day.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric' })}
                 </span>
-                <span>{Number(day.orders)} pedidos</span>
-                <span className="font-medium">{formatMoney(Number(day.revenue))}</span>
+                <span className="text-muted-foreground tabular-nums">
+                  {Number(day.orders)} pedidos
+                </span>
+                <span className="w-20 text-right font-medium tabular-nums">
+                  {formatMoney(Number(day.revenue))}
+                </span>
               </div>
             ))}
           </div>

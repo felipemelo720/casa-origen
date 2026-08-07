@@ -46,17 +46,28 @@ Código, comandos y errores exactos, verbatim.
 
 - Postgres en Docker, contenedor `co-pg`, puerto **5435** (5432-5434 los usan
   otros proyectos). Usuario y DB: `casaorigen`.
-- Dev server: puerto 3000 lo ocupa otro proyecto, Next cae a **3001**.
+- Dev server: 3000–3006 están ocupados por otros proyectos y por el propio
+  Casa Origen en producción. Levantar dev con puerto explícito:
+  `npm run dev -- -p 3010`. Sin `-p`, Next va probando hacia arriba y el
+  puerto cambia de sesión en sesión.
+- **Producción en esta misma máquina**: pm2, app `casaorigen`,
+  `npm start -- -p 3006`, cwd `/var/www/casa-origen`. Es lo que se ve en
+  `http://10.10.10.12:3006`. Un cambio en el código **no aparece** ahí hasta
+  rebuild + restart.
 - `psql` directo: `docker exec co-pg psql -U casaorigen -d casaorigen -c "..."`
 
 ## Comandos
 
 ```bash
-npm run dev
+npm run dev -- -p 3010
 npx prisma studio
 npx prisma migrate dev --name <nombre>
 npx prisma db seed
 npx tsc --noEmit && npm run lint && npm run build   # dev apagado
+
+# Desplegar a producción (3006). Parar pm2 primero: el build sobrescribe
+# .next/ bajo los pies de `next start` y deja chunks 404.
+pm2 stop casaorigen && rm -rf .next && npm run build && pm2 start casaorigen
 ```
 
 ## Gotchas

@@ -247,7 +247,11 @@ export function ProductCard({ product }: { product: ProductDetail }) {
           {/* The price rides the button: one target, and it says what the tap
               will cost with the size already chosen. */}
           <Button
-            className="w-full"
+            // Wraps instead of clipping: icon + label + price is wider than a
+            // card in the 2-column phone grid, and `whitespace-nowrap` +
+            // `justify-center` used to bleed the plus off the left edge and
+            // the price off the right.
+            className="h-auto w-full flex-wrap gap-x-2 gap-y-0.5 px-3 py-2 text-xs sm:text-sm"
             disabled={isUnavailable}
             onClick={handleAdd}
             aria-label={
@@ -260,11 +264,9 @@ export function ProductCard({ product }: { product: ProductDetail }) {
               'Agotado'
             ) : (
               <>
-                <Plus className="size-4" aria-hidden />
+                <Plus className="hidden size-4 sm:inline-block" aria-hidden />
                 <span>Agregar</span>
-                <span className="ml-auto font-bold tabular-nums">
-                  {formatMoney(effectivePrice)}
-                </span>
+                <span className="font-bold tabular-nums">{formatMoney(effectivePrice)}</span>
               </>
             )}
           </Button>

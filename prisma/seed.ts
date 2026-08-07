@@ -22,7 +22,14 @@ function slugify(value: string): string {
 async function seedSettings() {
   await prisma.restaurantSettings.upsert({
     where: { id: 'singleton' },
-    update: { logo: '/logo.png', whatsapp: '+56920499873' },
+    // One number only: the phone in the header dials the same line that answers
+    // on WhatsApp, so nobody calls a number the shop does not have.
+    update: {
+      logo: '/logo.png',
+      phone: '+56920499873',
+      whatsapp: '+56920499873',
+      deliveryEtaMinutes: 40,
+    },
     create: {
       id: 'singleton',
       name: 'Casa Origen',
@@ -31,7 +38,7 @@ async function seedSettings() {
       description:
         'Cocina chilena contemporánea preparada con ingredientes de productores locales.',
       email: 'contacto@casaorigen.cl',
-      phone: '+56 2 2345 6789',
+      phone: '+56920499873',
       whatsapp: '+56920499873',
       address: 'Av. Providencia 1234, Providencia, Santiago',
       instagramUrl: 'https://instagram.com/casaorigen',
@@ -40,7 +47,7 @@ async function seedSettings() {
       freeDeliveryFrom: 35000,
       minOrderAmount: 0,
       defaultPrepMinutes: 25,
-      deliveryEtaMinutes: 45,
+      deliveryEtaMinutes: 40,
       pickupEtaMinutes: 20,
       taxRate: 19,
       taxIncluded: true,
@@ -633,7 +640,9 @@ async function seedBanners() {
 async function seedPromotionsAndCoupons() {
   await prisma.coupon.upsert({
     where: { code: 'BIENVENIDA10' },
-    update: { isPublic: true },
+    // Retired: the welcome discount is not offered. Kept as a row because
+    // `coupon_redemptions` could reference it; reactivating is a flag.
+    update: { isActive: false, isPublic: false },
     create: {
       code: 'BIENVENIDA10',
       description: '10% de descuento en tu primer pedido',
@@ -643,9 +652,8 @@ async function seedPromotionsAndCoupons() {
       maxDiscount: 6000,
       perCustomerLimit: 1,
       startsAt: new Date(),
-      isActive: true,
-      // The one code advertised on the landing page.
-      isPublic: true,
+      isActive: false,
+      isPublic: false,
     },
   });
 
