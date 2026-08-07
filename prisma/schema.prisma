@@ -97,6 +97,11 @@ model Customer {
   email     String?
   phone     String
 
+  /// Scrypt hash (see `lib/security/password.ts`). Null for the rows the
+  /// checkout upserts on a guest order: having ordered is not having an
+  /// account, and a guest must never be able to "log in" as nobody.
+  passwordHash String?
+
   notes      String?
   isBlocked  Boolean @default(false)
   orderCount Int     @default(0)
@@ -109,7 +114,9 @@ model Customer {
   orders    Order[]
 
   @@unique([phone])
-  @@index([email])
+  /// Unique because it is the login identifier. Null stays repeatable in
+  /// Postgres, so guest rows without an email are unaffected.
+  @@unique([email])
   @@index([createdAt])
   @@index([totalSpent])
   @@map("customers")

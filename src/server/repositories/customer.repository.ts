@@ -3,9 +3,77 @@ import 'server-only';
 import { prisma } from '@/lib/db/prisma';
 import type { Prisma } from '@prisma/client';
 
+/** Narrow projection for the signed-in customer — never the whole row. */
+export type CustomerAccount = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string;
+  orderCount: number;
+  totalSpent: number;
+};
+
+const accountSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  phone: true,
+  orderCount: true,
+  totalSpent: true,
+} as const;
+
 export const customerRepository = {
   async findByPhone(phone: string) {
     return prisma.customer.findUnique({ where: { phone }, include: { addresses: true } });
+  },
+
+  /** Login lookup. Includes `passwordHash`, so it never reaches a component. */
+  async findAuthByEmail(email: string) {
+    return prisma.customer.findUnique({
+      where: { email },
+      select: { ...accountSelect, passwordHash: true, isBlocked: true },
+    });
+  },
+
+  async findAccountById(id: string): Promise<CustomerAccount | null> {
+    return prisma.customer.findUnique({ where: { id }, select: accountSelect });
+  },
+
+  /**
+   * Attaches credentials to the row the checkout already created for this
+   * phone, or creates one. Registering after ordering as a guest has to adopt
+   * the existing history instead of forking a second customer.
+   */
+  async upsertAccountByPhone(
+    phone: string,
+    data: { firstName: string; lastName: string; email: string; passwordHash: string },
+  ): Promise<CustomerAccount> {
+    return prisma.customer.upsert({
+      where: { phone },
+      update: data,
+      create: { phone, ...data },
+      select: accountSelect,
+    });
+  },
+
+  /** Order history for the account page. Snapshot columns only. */
+  async findOrdersByCustomer(customerId: string, limit = 20) {
+    return prisma.order.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        type: true,
+        total: true,
+        createdAt: true,
+        items: { select: { name: true, quantity: true } },
+      },
+    });
   },
   async findById(id: string) {
     return prisma.customer.findUnique({ where: { id }, include: { addresses: true } });
