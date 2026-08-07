@@ -22,8 +22,7 @@ export const metadata: Metadata = {
     default: `${publicEnv.NEXT_PUBLIC_APP_NAME} — Cocina de origen, delivery en línea`,
     template: `%s — ${publicEnv.NEXT_PUBLIC_APP_NAME}`,
   },
-  description:
-    'Pide en línea platos de cocina chilena contemporánea. Delivery y retiro en tienda.',
+  description: 'Pide en línea platos de cocina chilena contemporánea. Delivery y retiro en tienda.',
   applicationName: publicEnv.NEXT_PUBLIC_APP_NAME,
   manifest: '/manifest.webmanifest',
   icons: {
@@ -55,11 +54,7 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang={publicEnv.NEXT_PUBLIC_LOCALE.split('-')[0]} suppressHydrationWarning>
       <body

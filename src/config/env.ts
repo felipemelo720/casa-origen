@@ -10,20 +10,21 @@ import { z } from 'zod';
  * obscure runtime error deep inside a request.
  */
 const serverEnvSchema = z.object({
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
-  DATABASE_URL: z
-    .string()
-    .url('DATABASE_URL must be a valid PostgreSQL connection string'),
+  DATABASE_URL: z.string().url('DATABASE_URL must be a valid PostgreSQL connection string'),
 
   /** Single shared password gating /admin. */
   ADMIN_PASSWORD: z.string().min(8, 'ADMIN_PASSWORD must be at least 8 characters'),
 
-  LOG_LEVEL: z
-    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
-    .default('info'),
+  /**
+   * HMAC key signing the customer session cookie. Separate from
+   * ADMIN_PASSWORD on purpose: rotating the admin password must not sign
+   * customers out, and the admin password must never double as a signing key.
+   */
+  AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 characters'),
+
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(120),

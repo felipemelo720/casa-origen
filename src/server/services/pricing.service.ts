@@ -64,10 +64,7 @@ async function priceItem(input: CartItemInput): Promise<PricedItem> {
 
   const variantsByOption = new Map(
     product.variantGroups.flatMap((group) =>
-      group.options.map((option) => [
-        option.id,
-        { group, option },
-      ] as const),
+      group.options.map((option) => [option.id, { group, option }] as const),
     ),
   );
 
@@ -96,6 +93,14 @@ async function priceItem(input: CartItemInput): Promise<PricedItem> {
     }
   }
 
+  // The carta charges add-ons by pizza size, not by add-on: $700 on a 24 cm and
+  // $1.000 on a 32 cm, whatever you put on top. So the selected size wins over
+  // the extra's own catalogue price whenever it carries one.
+  const sizeExtraPrice = selectedVariants.reduce<number | null>((price, variant) => {
+    const option = variantsByOption.get(variant.optionId)?.option;
+    return option?.extraPrice ?? price;
+  }, null);
+
   const extrasByProduct = new Map(product.extras.map((entry) => [entry.extraId, entry]));
   const selectedExtras: PricedExtra[] = [];
   for (const requested of input.selectedExtras) {
@@ -107,7 +112,7 @@ async function priceItem(input: CartItemInput): Promise<PricedItem> {
     selectedExtras.push({
       extraId: entry.extra.id,
       name: entry.extra.name,
-      unitPrice: entry.priceOverride ?? entry.extra.price,
+      unitPrice: sizeExtraPrice ?? entry.priceOverride ?? entry.extra.price,
       quantity,
     });
   }
@@ -146,9 +151,7 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
 
   const settings = await settingsRepository.get();
   if (subtotal < settings.minOrderAmount) {
-    throw new BusinessRuleError(
-      `El pedido mínimo es de ${settings.minOrderAmount}.`,
-    );
+    throw new BusinessRuleError(`El pedido mínimo es de ${settings.minOrderAmount}.`);
   }
 
   // --- Best applicable promotion (highest priority, first match wins) -----
@@ -165,15 +168,12 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
     const applies =
       promo.scope === 'ALL' ||
       (promo.scope === 'PRODUCT' && promo.products.some((p) => productIds.has(p.productId))) ||
-      (promo.scope === 'CATEGORY' &&
-        promo.categories.some((c) => categoryIds.has(c.categoryId)));
+      (promo.scope === 'CATEGORY' && promo.categories.some((c) => categoryIds.has(c.categoryId)));
 
     if (!applies) continue;
 
     const raw =
-      promo.discountType === 'PERCENTAGE'
-        ? percentageOf(subtotal, promo.value)
-        : promo.value;
+      promo.discountType === 'PERCENTAGE' ? percentageOf(subtotal, promo.value) : promo.value;
     const capped = promo.maxDiscount ? Math.min(raw, promo.maxDiscount) : raw;
 
     promotionDiscount = nonNegative(capped);
@@ -186,7 +186,8 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
   if (input.orderType === 'DELIVERY') {
     if (!input.communeId) throw new BusinessRuleError('Selecciona tu comuna de despacho.');
     const commune = await communeRepository.findById(input.communeId);
-    if (!commune || !commune.isActive) throw new BusinessRuleError('La comuna seleccionada no está disponible.');
+    if (!commune || !commune.isActive)
+      throw new BusinessRuleError('La comuna seleccionada no está disponible.');
     if (subtotal < commune.minOrder) {
       throw new BusinessRuleError(
         `El pedido mínimo para ${commune.name} es de ${commune.minOrder}.`,

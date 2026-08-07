@@ -34,18 +34,25 @@ export function TrustBar({
     items.push({ icon: Clock, value: formatMoney(freeDeliveryFrom), label: 'Envío gratis desde' });
   }
 
-  items.push({
-    icon: Wallet,
-    value: minOrderAmount > 0 ? formatMoney(minOrderAmount) : 'Sin mínimo',
-    label: 'Pedido mínimo',
-  });
+  // Dropped entirely when there is no minimum, instead of printing "Sin
+  // mínimo": a row about a rule that does not exist is noise.
+  if (minOrderAmount > 0) {
+    items.push({ icon: Wallet, value: formatMoney(minOrderAmount), label: 'Pedido mínimo' });
+  }
 
   return (
     <section className="border-border bg-secondary/40 border-b">
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-4 px-4 py-6 sm:px-6 lg:grid-cols-4 lg:px-8">
+      {/* Flex, not a fixed 4-column grid: the items are conditional (two of
+          them disappear with delivery off), and a grid left an empty cell that
+          pushed everything off-center. `flex-1` splits the row evenly for any
+          count, and each item centers inside its own share. */}
+      <div className="divide-border mx-auto flex max-w-7xl flex-wrap items-center gap-y-6 px-4 py-6 sm:divide-x sm:px-6 lg:px-8">
         {items.map((item) => (
-          <div key={item.label} className="flex items-center gap-3">
-            <item.icon className="text-primary size-5 shrink-0" />
+          <div
+            key={item.label}
+            className="flex basis-1/2 items-center justify-center gap-3 sm:flex-1 sm:basis-0 sm:px-4"
+          >
+            <item.icon className="text-primary size-5 shrink-0" aria-hidden />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{item.value}</p>
               <p className="text-muted-foreground truncate text-xs">{item.label}</p>

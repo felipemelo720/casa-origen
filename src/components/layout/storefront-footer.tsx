@@ -1,65 +1,230 @@
-import Link from 'next/link';
-import { Instagram, Facebook, MapPin, Phone } from 'lucide-react';
+import {
+  Bike,
+  Clock,
+  Facebook,
+  Instagram,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  Pizza,
+  Store,
+} from 'lucide-react';
 
-export function StorefrontFooter({
-  restaurantName,
-  phone,
-  address,
-  instagramUrl,
-  facebookUrl,
-}: {
+import { BrandMark } from '@/components/layout/brand-mark';
+import type { ScheduleDay } from '@/server/services/schedule.service';
+import { cn } from '@/lib/utils';
+
+const FOOTER_LINKS = [
+  { href: '#menu', label: 'Nuestras pizzas' },
+  { href: '#cobertura', label: 'Zonas de despacho' },
+  { href: '#como-pedir', label: 'Cómo pedir' },
+  { href: '#horarios', label: 'Horarios' },
+] as const;
+
+type Props = {
   restaurantName: string;
+  tagline: string | null;
+  logo: string | null;
   phone: string | null;
+  email: string | null;
+  /** Ready-to-use `wa.me` link, or null when no number is configured. */
+  whatsappUrl: string | null;
   address: string | null;
   instagramUrl: string | null;
   facebookUrl: string | null;
-}) {
+  schedule: ScheduleDay[];
+  deliveryEnabled: boolean;
+  deliveryEtaMinutes: number;
+  pickupEtaMinutes: number;
+};
+
+/**
+ * Server component: the whole footer is data the server already has, so it
+ * costs zero client JS. The open/closed badge deliberately lives only in the
+ * header — with `revalidate = 60` a second copy down here would be stale
+ * without anything refreshing it.
+ */
+export function StorefrontFooter({
+  restaurantName,
+  tagline,
+  logo,
+  phone,
+  email,
+  whatsappUrl,
+  address,
+  instagramUrl,
+  facebookUrl,
+  schedule,
+  deliveryEnabled,
+  deliveryEtaMinutes,
+  pickupEtaMinutes,
+}: Props) {
+  const telHref = phone ? `tel:${phone.replace(/[^\d+]/g, '')}` : null;
+  const mapsHref = address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+    : null;
+
   return (
     <footer className="border-border bg-secondary/40 mt-24 border-t">
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:grid-cols-3 sm:px-6 lg:px-8">
-        <div>
-          <p className="font-display text-lg font-bold">{restaurantName}</p>
-          <p className="text-muted-foreground mt-2 text-sm">
-            Cocina de origen, sabor de siempre.
-          </p>
-          <div className="mt-4 flex gap-3">
-            {instagramUrl && (
-              <a href={instagramUrl} target="_blank" rel="noreferrer" aria-label="Instagram">
-                <Instagram className="text-muted-foreground hover:text-primary size-5" />
-              </a>
-            )}
-            {facebookUrl && (
-              <a href={facebookUrl} target="_blank" rel="noreferrer" aria-label="Facebook">
-                <Facebook className="text-muted-foreground hover:text-primary size-5" />
-              </a>
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-2 lg:grid-cols-4 lg:px-8">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2.5">
+            {logo ? (
+              <>
+                <BrandMark logo={logo} />
+                <p className="sr-only">{restaurantName}</p>
+              </>
+            ) : (
+              <>
+                <span className="bg-primary text-primary-foreground grid size-9 place-items-center rounded-lg">
+                  <Pizza className="size-5" aria-hidden />
+                </span>
+                <p className="font-display text-lg font-bold">{restaurantName}</p>
+              </>
             )}
           </div>
+
+          <p className="text-muted-foreground text-sm">
+            {tagline ?? 'Cocina de origen, sabor de siempre.'}
+          </p>
+
+          <ul className="text-muted-foreground space-y-1.5 text-sm">
+            {deliveryEnabled && (
+              <li className="flex items-center gap-2">
+                <Bike className="size-4 shrink-0" aria-hidden />
+                Despacho en {deliveryEtaMinutes} min aprox.
+              </li>
+            )}
+            <li className="flex items-center gap-2">
+              <Store className="size-4 shrink-0" aria-hidden />
+              Retiro en tienda en {pickupEtaMinutes} min aprox.
+            </li>
+          </ul>
+
+          {(instagramUrl ?? facebookUrl) && (
+            <div className="flex gap-2 pt-1">
+              {instagramUrl && (
+                <a
+                  href={instagramUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`${restaurantName} en Instagram`}
+                  className="border-border text-muted-foreground hover:text-primary hover:border-primary/40 grid size-9 place-items-center rounded-full border transition-colors"
+                >
+                  <Instagram className="size-4" aria-hidden />
+                </a>
+              )}
+              {facebookUrl && (
+                <a
+                  href={facebookUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`${restaurantName} en Facebook`}
+                  className="border-border text-muted-foreground hover:text-primary hover:border-primary/40 grid size-9 place-items-center rounded-full border transition-colors"
+                >
+                  <Facebook className="size-4" aria-hidden />
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="space-y-2 text-sm">
-          <p className="font-medium">Contacto</p>
-          {phone && (
-            <p className="text-muted-foreground flex items-center gap-2">
-              <Phone className="size-4" /> {phone}
-            </p>
-          )}
-          {address && (
-            <p className="text-muted-foreground flex items-center gap-2">
-              <MapPin className="size-4" /> {address}
-            </p>
-          )}
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold">Contacto</h2>
+          <ul className="text-muted-foreground space-y-2.5 text-sm">
+            {telHref && phone && (
+              <li>
+                <a href={telHref} className="hover:text-primary flex items-center gap-2">
+                  <Phone className="size-4 shrink-0" aria-hidden />
+                  {phone}
+                </a>
+              </li>
+            )}
+            {whatsappUrl && (
+              <li>
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-primary flex items-center gap-2"
+                >
+                  <MessageCircle className="size-4 shrink-0" aria-hidden />
+                  Pedidos por WhatsApp
+                </a>
+              </li>
+            )}
+            {email && (
+              <li>
+                <a href={`mailto:${email}`} className="hover:text-primary flex items-center gap-2">
+                  <Mail className="size-4 shrink-0" aria-hidden />
+                  {email}
+                </a>
+              </li>
+            )}
+            {address && (
+              <li>
+                {/* A dead-end address is useless on a phone: link it to maps. */}
+                <a
+                  href={mapsHref ?? undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-primary flex items-start gap-2"
+                >
+                  <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  {address}
+                </a>
+              </li>
+            )}
+          </ul>
         </div>
 
-        <div className="space-y-2 text-sm">
-          <p className="font-medium">Enlaces</p>
-          <Link href="#menu" className="text-muted-foreground hover:text-primary block">
-            Menú
-          </Link>
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold">Explora</h2>
+          <ul className="text-muted-foreground space-y-2.5 text-sm">
+            {FOOTER_LINKS.map((link) => (
+              <li key={link.href}>
+                <a href={link.href} className="hover:text-primary">
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <Clock className="size-4 shrink-0" aria-hidden />
+            Horarios
+          </h2>
+          {/* Same rows as the `#horarios` section: what the store advertises.
+              The switch in /admin is what actually gates orders. */}
+          <dl className="text-muted-foreground space-y-1.5 text-sm">
+            {schedule.map((day) => (
+              <div
+                key={day.dayOfWeek}
+                className={cn(
+                  'flex items-baseline justify-between gap-3',
+                  day.isToday && 'text-foreground font-semibold',
+                )}
+              >
+                <dt>{day.label}</dt>
+                <dd className="tabular-nums">
+                  {day.isClosed ? 'Cerrado' : `${day.opensAt} – ${day.closesAt}`}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </div>
 
-      <div className="border-border border-t px-4 py-4 text-center text-xs text-muted-foreground sm:px-6 lg:px-8">
-        © {new Date().getFullYear()} {restaurantName}. Todos los derechos reservados.
+      <div className="border-border border-t">
+        <div className="text-muted-foreground mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+          <p>
+            © {new Date().getFullYear()} {restaurantName}. Todos los derechos reservados.
+          </p>
+          <p>Paine, Región Metropolitana</p>
+        </div>
       </div>
     </footer>
   );

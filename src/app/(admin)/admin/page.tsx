@@ -1,5 +1,5 @@
 import { startOfDay, subDays } from 'date-fns';
-import { DollarSign, Receipt, ShoppingBag } from 'lucide-react';
+import { DollarSign, Receipt, ShoppingBag, Star } from 'lucide-react';
 
 import { isAdminAuthenticated } from '@/lib/auth/admin-session';
 import {
@@ -8,10 +8,13 @@ import {
   toggleAcceptingOrdersAction,
   toggleDeliveryAction,
   setProductAvailabilityAction,
+  setProductFeaturedAction,
+  updateBusinessHoursAction,
 } from '@/server/actions/admin.actions';
 import { settingsRepository } from '@/server/repositories/operations.repository';
-import { productRepository } from '@/server/repositories/product.repository';
+import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
 import { analyticsRepository } from '@/server/repositories/analytics.repository';
+import { getWeeklySchedule } from '@/server/services/schedule.service';
 import { StatCard } from '@/features/admin/stat-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,10 +44,13 @@ export default async function AdminPage() {
     );
   }
 
-  const [settings, products] = await Promise.all([
+  const [settings, products, weeklySchedule] = await Promise.all([
     settingsRepository.get(),
     productRepository.findAllForAvailabilityToggle(),
+    getWeeklySchedule(),
   ]);
+
+  const featuredCount = products.filter((product) => product.isFeatured).length;
 
   const categories = new Map<string, { categoryName: string; products: typeof products }>();
   for (const product of products) {
@@ -80,15 +86,24 @@ export default async function AdminPage() {
         {/* Store status */}
         <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
           <div>
-            <p className="text-muted-foreground text-xs tracking-widest uppercase">Estado del negocio</p>
+            <p className="text-muted-foreground text-xs tracking-widest uppercase">
+              Estado del negocio
+            </p>
             <div className="mt-1 flex items-center gap-2">
               <span
-                className={cn('size-2.5 rounded-full', settings.acceptingOrders ? 'bg-green-500' : 'bg-red-500')}
+                className={cn(
+                  'size-2.5 rounded-full',
+                  settings.acceptingOrders ? 'bg-green-500' : 'bg-red-500',
+                )}
               />
               <span className="font-display text-xl font-bold">
                 {settings.acceptingOrders ? 'ABIERTO' : 'CERRADO'}
               </span>
             </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Manda sobre los horarios: abierto acá es abierto en la web, aunque sea fuera de
+              horario. Nada cierra solo.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <form action={toggleAcceptingOrdersAction.bind(null, true)}>
@@ -120,7 +135,10 @@ export default async function AdminPage() {
             <p className="text-muted-foreground text-xs tracking-widest uppercase">Delivery</p>
             <div className="mt-1 flex items-center gap-2">
               <span
-                className={cn('size-2.5 rounded-full', settings.deliveryEnabled ? 'bg-green-500' : 'bg-red-500')}
+                className={cn(
+                  'size-2.5 rounded-full',
+                  settings.deliveryEnabled ? 'bg-green-500' : 'bg-red-500',
+                )}
               />
               <span className="font-display text-xl font-bold">
                 {settings.deliveryEnabled ? 'DISPONIBLE' : 'NO DISPONIBLE'}
@@ -151,39 +169,134 @@ export default async function AdminPage() {
           </div>
         </section>
 
+        {/* Business hours */}
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
+          <div>
+            <p className="text-muted-foreground text-xs tracking-widest uppercase">Horarios</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Estos son los horarios que se muestran en la web.
+            </p>
+          </div>
+          <form action={updateBusinessHoursAction} className="space-y-2">
+            {weeklySchedule.map((day) => (
+              <div key={day.dayOfWeek} className="flex items-center gap-3">
+                <label className="text-muted-foreground w-20 text-sm font-medium">
+                  {day.label}
+                </label>
+                {day.isClosed ? (
+                  <span className="text-muted-foreground text-sm">Cerrado</span>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="time"
+                      name={`${day.dayOfWeek}_opensAt`}
+                      defaultValue={day.opensAt}
+                      className="w-24"
+                      required
+                    />
+                    <span className="text-muted-foreground">–</span>
+                    <Input
+                      type="time"
+                      name={`${day.dayOfWeek}_closesAt`}
+                      defaultValue={day.closesAt}
+                      className="w-24"
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+            <Button type="submit" className="w-full">
+              Guardar horarios
+            </Button>
+          </form>
+        </section>
+
         {/* Menu availability */}
         <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
-          <p className="text-muted-foreground text-xs tracking-widest uppercase">Disponibilidad del menú</p>
+          <div className="space-y-1">
+            <p className="text-muted-foreground text-xs tracking-widest uppercase">Menú</p>
+            <p className="text-muted-foreground text-xs">
+              <Star className="mr-1 inline size-3" />
+              destaca el producto en «Los más pedidos» de la portada.{' '}
+              {featuredCount === 0
+                ? `Sin ninguno destacado se muestran los ${HIGHLIGHTED_LIMIT} más vendidos.`
+                : `${featuredCount} destacado${featuredCount === 1 ? '' : 's'}.`}
+            </p>
+            {featuredCount > HIGHLIGHTED_LIMIT && (
+              <p className="text-xs font-medium text-amber-600">
+                La portada solo muestra {HIGHLIGHTED_LIMIT}: sobran{' '}
+                {featuredCount - HIGHLIGHTED_LIMIT}.
+              </p>
+            )}
+          </div>
           {[...categories.values()].map(({ categoryName, products: categoryProducts }) => (
             <div key={categoryName} className="space-y-2">
-              <p className="text-muted-foreground/70 text-[10px] tracking-widest uppercase">{categoryName}</p>
+              <p className="text-muted-foreground/70 text-[10px] tracking-widest uppercase">
+                {categoryName}
+              </p>
               <div className="space-y-1.5">
                 {categoryProducts.map((product) => {
                   const isUnavailable = product.availability === 'OUT_OF_STOCK';
                   return (
-                    <form
+                    <div
                       key={product.id}
-                      action={setProductAvailabilityAction.bind(null, product.id, isUnavailable)}
                       className="bg-background border-border flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <span
-                          className={cn('size-2 shrink-0 rounded-full', isUnavailable ? 'bg-red-500' : 'bg-green-500')}
+                          className={cn(
+                            'size-2 shrink-0 rounded-full',
+                            isUnavailable ? 'bg-red-500' : 'bg-green-500',
+                          )}
                         />
                         <span className="truncate text-sm">{product.name}</span>
                       </div>
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant="outline"
-                        className={cn(
-                          'shrink-0',
-                          isUnavailable ? 'border-green-500/40 text-green-600' : 'border-red-500/40 text-red-600',
-                        )}
-                      >
-                        {isUnavailable ? 'Activar' : 'Agotar'}
-                      </Button>
-                    </form>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {/* Separate forms: nesting one inside the other is invalid HTML. */}
+                        <form
+                          action={setProductFeaturedAction.bind(
+                            null,
+                            product.id,
+                            !product.isFeatured,
+                          )}
+                        >
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="outline"
+                            title={
+                              product.isFeatured ? 'Quitar de destacados' : 'Destacar en la portada'
+                            }
+                            className={cn(
+                              product.isFeatured && 'border-amber-500/40 text-amber-600',
+                            )}
+                          >
+                            <Star className={cn('size-4', product.isFeatured && 'fill-current')} />
+                          </Button>
+                        </form>
+                        <form
+                          action={setProductAvailabilityAction.bind(
+                            null,
+                            product.id,
+                            isUnavailable,
+                          )}
+                        >
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="outline"
+                            className={cn(
+                              isUnavailable
+                                ? 'border-green-500/40 text-green-600'
+                                : 'border-red-500/40 text-red-600',
+                            )}
+                          >
+                            {isUnavailable ? 'Activar' : 'Agotar'}
+                          </Button>
+                        </form>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -197,11 +310,18 @@ export default async function AdminPage() {
           <div className="grid grid-cols-3 gap-3">
             <StatCard icon={DollarSign} label="Ventas" value={formatMoney(sales.revenue)} />
             <StatCard icon={ShoppingBag} label="Pedidos" value={String(sales.orderCount)} />
-            <StatCard icon={Receipt} label="Ticket prom." value={formatMoney(sales.averageTicket)} />
+            <StatCard
+              icon={Receipt}
+              label="Ticket prom."
+              value={formatMoney(sales.averageTicket)}
+            />
           </div>
           <div className="space-y-1.5">
             {dailySeries.map((day) => (
-              <div key={day.day.toISOString()} className="flex items-center justify-between text-sm">
+              <div
+                key={day.day.toISOString()}
+                className="flex items-center justify-between text-sm"
+              >
                 <span className="text-muted-foreground">
                   {day.day.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric' })}
                 </span>

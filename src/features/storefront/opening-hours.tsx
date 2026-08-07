@@ -9,8 +9,9 @@ type Props = {
 };
 
 /**
- * The weekly schedule already drives `getOpenState`; showing it answers the
- * most asked question without anyone having to message to find out.
+ * What the restaurant advertises. `getOpenState` no longer reads it — the
+ * switch in /admin decides — so the badge can legitimately disagree with the
+ * row for today when the kitchen opens late or stays open past closing.
  */
 export function OpeningHours({ schedule, open }: Props) {
   return (
@@ -22,10 +23,9 @@ export function OpeningHours({ schedule, open }: Props) {
         </div>
         <span
           className={cn(
+            // Same tokens as the header badge; no raw palette colors.
             'rounded-full px-3 py-1 text-xs font-semibold',
-            open.isOpen
-              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-              : 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+            open.isOpen ? 'bg-success/15 text-foreground' : 'bg-warning/20 text-foreground',
           )}
         >
           {open.isOpen ? 'Abierto ahora' : 'Cerrado'}
@@ -36,10 +36,7 @@ export function OpeningHours({ schedule, open }: Props) {
         {schedule.map((day) => (
           <div
             key={day.dayOfWeek}
-            className={cn(
-              'flex items-center justify-between py-2',
-              day.isToday && 'font-semibold',
-            )}
+            className={cn('flex items-center justify-between py-2', day.isToday && 'font-semibold')}
           >
             <dt className={cn(!day.isToday && 'text-muted-foreground')}>
               {day.label}

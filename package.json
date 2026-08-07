@@ -11,18 +11,30 @@
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json,css}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,css}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,md,json,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,md,json,css}\"",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "prepare": "husky"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --max-warnings 0",
+      "prettier --check"
+    ],
+    "*.{js,mjs,cjs,json,md,css}": [
+      "prettier --check"
+    ]
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -83,12 +95,15 @@
     "eslint-config-next": "^15.1.4",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
     "prettier": "^3.4.2",
     "prettier-plugin-tailwindcss": "^0.6.9",
     "prisma": "^6.2.1",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.19.1"
+    "typescript-eslint": "^8.19.1",
+    "vitest": "^4.1.10"
   }
 }

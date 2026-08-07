@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,19 +12,59 @@ import { cn } from '@/lib/utils';
 import type { ProductDetail } from '@/server/repositories/product.repository';
 import { useCartStore } from '@/features/cart/cart-store';
 
+type SizeOptions = ProductDetail['variantGroups'][number]['options'];
+
+/**
+ * Biggest size the kitchen can actually make: the highest `priceDelta` among
+ * the available options. Falls back to the first available one when every
+ * delta is the same, and to nothing when the group is sold out.
+ */
+function largestAvailableOption(options: SizeOptions | undefined) {
+  if (!options) return undefined;
+
+  let best: SizeOptions[number] | undefined;
+  for (const option of options) {
+    if (!option.isAvailable) continue;
+    if (!best || option.priceDelta > best.priceDelta) best = option;
+  }
+  return best;
+}
+
 export function ProductCard({ product }: { product: ProductDetail }) {
   const addLine = useCartStore((state) => state.addLine);
   const isUnavailable = product.availability !== 'AVAILABLE';
   const sizeGroup = product.variantGroups[0];
 
+  // Deliberately not `isDefault`, which marks the smallest size: the card opens
+  // on the biggest available one, so the button suggests the family pizza and
+  // sizing down is one tap away instead of sizing up.
   const [selectedOptionId, setSelectedOptionId] = useState(
-    sizeGroup?.options.find((option) => option.isDefault)?.id ?? sizeGroup?.options[0]?.id,
+    () => largestAvailableOption(sizeGroup?.options)?.id,
   );
   const selectedOption = sizeGroup?.options.find((option) => option.id === selectedOptionId);
 
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([]);
+
+  const availableExtras = product.extras.filter((entry) => entry.extra.isActive);
+
+  /** Mirrors `pricing.service`: the chosen size sets the add-on price. */
+  function extraUnitPrice(entry: (typeof availableExtras)[number]) {
+    return selectedOption?.extraPrice ?? entry.priceOverride ?? entry.extra.price;
+  }
+
+  const chosenExtras = availableExtras.filter((entry) => selectedExtraIds.includes(entry.extraId));
+
   const basePrice = product.offerPrice ?? product.price;
   const hasOffer = product.offerPrice !== null && product.offerPrice < product.price;
-  const effectivePrice = basePrice + (selectedOption?.priceDelta ?? 0);
+  const extrasTotal = chosenExtras.reduce((sum, entry) => sum + extraUnitPrice(entry), 0);
+  const effectivePrice = basePrice + (selectedOption?.priceDelta ?? 0) + extrasTotal;
+
+  function toggleExtra(extraId: string) {
+    setSelectedExtraIds((current) =>
+      current.includes(extraId) ? current.filter((id) => id !== extraId) : [...current, extraId],
+    );
+  }
 
   function handleAdd() {
     addLine({
@@ -41,13 +81,23 @@ export function ProductCard({ product }: { product: ProductDetail }) {
                 optionId: selectedOption.id,
                 optionName: selectedOption.name,
                 priceDelta: selectedOption.priceDelta,
+                extraPrice: selectedOption.extraPrice,
               },
             ]
           : [],
-      extras: [],
+      extras: chosenExtras.map((entry) => ({
+        extraId: entry.extraId,
+        name: entry.extra.name,
+        unitPrice: extraUnitPrice(entry),
+        quantity: 1,
+      })),
       removedIngredientIds: [],
       removedIngredientNames: [],
     });
+    // The card is reused for the next order of the same pizza; leaving the
+    // add-ons ticked would silently price the second one like the first.
+    setSelectedExtraIds([]);
+    setExtrasOpen(false);
   }
 
   return (
@@ -99,43 +149,124 @@ export function ProductCard({ product }: { product: ProductDetail }) {
           <p className="text-muted-foreground line-clamp-2 text-sm">{product.shortDescription}</p>
         )}
 
+        {/* Every size with its own price: comparing them is the actual
+            decision, and hiding all but the selected one forced a tap per size
+            just to find out what the big one costs. */}
         {sizeGroup && sizeGroup.options.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {sizeGroup.options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                disabled={!option.isAvailable}
-                onClick={() => setSelectedOptionId(option.id)}
-                className={cn(
-                  'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                  option.id === selectedOptionId
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border bg-background hover:border-primary',
-                )}
-              >
-                {option.name}
-              </button>
-            ))}
+          <div role="group" aria-label={sizeGroup.name} className="mt-1 flex flex-col gap-1.5">
+            {sizeGroup.options.map((option) => {
+              const isSelected = option.id === selectedOptionId;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={isSelected}
+                  disabled={!option.isAvailable}
+                  title={option.isAvailable ? undefined : 'Tamaño no disponible'}
+                  onClick={() => setSelectedOptionId(option.id)}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                    isSelected
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border bg-background hover:border-primary',
+                  )}
+                >
+                  <span className={cn('truncate', isSelected && 'font-semibold')}>
+                    {option.name}
+                  </span>
+                  <span className={cn('shrink-0 tabular-nums', isSelected && 'font-bold')}>
+                    {formatMoney(basePrice + option.priceDelta)}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        <div className="mt-auto flex items-center justify-between pt-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-primary text-lg font-bold">{formatMoney(effectivePrice)}</span>
-            {hasOffer && (
-              <span className="text-muted-foreground text-sm line-through">
-                {formatMoney(product.price + (selectedOption?.priceDelta ?? 0))}
+        {/* Collapsed by default: eleven add-ons open on every card would push
+            the buy button off the screen on a phone, and most orders are the
+            pizza as it comes. The count keeps the choice visible once closed. */}
+        {availableExtras.length > 0 && (
+          <div className="mt-1">
+            <button
+              type="button"
+              onClick={() => setExtrasOpen((open) => !open)}
+              aria-expanded={extrasOpen}
+              className="text-muted-foreground hover:text-foreground flex w-full items-center justify-between gap-2 rounded-lg py-1.5 text-xs transition-colors"
+            >
+              <span>
+                Agregados
+                {chosenExtras.length > 0 && (
+                  <span className="text-primary font-semibold"> · {chosenExtras.length}</span>
+                )}
               </span>
+              <ChevronDown
+                className={cn('size-4 shrink-0 transition-transform', extrasOpen && 'rotate-180')}
+                aria-hidden
+              />
+            </button>
+
+            {extrasOpen && (
+              <div role="group" aria-label="Agregados" className="flex flex-wrap gap-1.5 pt-1">
+                {availableExtras.map((entry) => {
+                  const isSelected = selectedExtraIds.includes(entry.extraId);
+                  return (
+                    <button
+                      key={entry.extraId}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => toggleExtra(entry.extraId)}
+                      className={cn(
+                        'rounded-lg border px-2 py-1 text-xs transition-colors',
+                        isSelected
+                          ? 'border-primary bg-primary/10 font-semibold'
+                          : 'border-border bg-background hover:border-primary',
+                      )}
+                    >
+                      {entry.extra.name}
+                      <span className="text-muted-foreground ml-1 tabular-nums">
+                        +{formatMoney(extraUnitPrice(entry))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
+        )}
+
+        <div className="mt-auto pt-3">
+          {hasOffer && (
+            <p className="text-muted-foreground mb-1 text-xs">
+              Antes{' '}
+              <span className="line-through">
+                {formatMoney(product.price + (selectedOption?.priceDelta ?? 0) + extrasTotal)}
+              </span>
+            </p>
+          )}
+          {/* The price rides the button: one target, and it says what the tap
+              will cost with the size already chosen. */}
           <Button
-            size="icon-sm"
+            className="w-full"
             disabled={isUnavailable}
             onClick={handleAdd}
-            aria-label={`Agregar ${product.name} al carrito`}
+            aria-label={
+              isUnavailable
+                ? `${product.name} agotado`
+                : `Agregar ${product.name}${selectedOption ? ` ${selectedOption.name}` : ''} al carrito por ${formatMoney(effectivePrice)}`
+            }
           >
-            <Plus className="size-4" />
+            {isUnavailable ? (
+              'Agotado'
+            ) : (
+              <>
+                <Plus className="size-4" aria-hidden />
+                <span>Agregar</span>
+                <span className="ml-auto font-bold tabular-nums">
+                  {formatMoney(effectivePrice)}
+                </span>
+              </>
+            )}
           </Button>
         </div>
       </div>

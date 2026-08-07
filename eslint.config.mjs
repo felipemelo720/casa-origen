@@ -11,13 +11,7 @@ const compat = new FlatCompat({ baseDirectory: __dirname });
 
 export default tseslint.config(
   {
-    ignores: [
-      '.next/**',
-      'node_modules/**',
-      'next-env.d.ts',
-      'public/sw.js',
-      'src/generated/**',
-    ],
+    ignores: ['.next/**', 'node_modules/**', 'next-env.d.ts', 'public/sw.js', 'src/generated/**'],
   },
 
   ...compat.extends('next/core-web-vitals'),
@@ -65,7 +59,12 @@ export default tseslint.config(
 
   {
     // Repositories are the only layer allowed to touch Prisma directly.
-    files: ['src/features/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
+    files: [
+      'src/features/**/*.{ts,tsx}',
+      'src/app/**/*.{ts,tsx}',
+      'src/server/services/**/*.{ts,tsx}',
+      'src/server/actions/**/*.{ts,tsx}',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -74,7 +73,8 @@ export default tseslint.config(
             {
               name: '@/lib/db/prisma',
               message:
-                'Access data through a repository (src/server/repositories) instead of Prisma directly.',
+                'Access data through a repository (src/server/repositories) instead of Prisma directly. ' +
+                'Need a multi-repository transaction? Use withTransaction from transaction.repository.',
             },
           ],
         },

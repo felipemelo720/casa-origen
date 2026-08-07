@@ -22,22 +22,23 @@ function slugify(value: string): string {
 async function seedSettings() {
   await prisma.restaurantSettings.upsert({
     where: { id: 'singleton' },
-    update: {},
+    update: { logo: '/logo.png', whatsapp: '+56920499873' },
     create: {
       id: 'singleton',
       name: 'Casa Origen',
+      logo: '/logo.png',
       tagline: 'Cocina de origen, sabor de siempre',
       description:
         'Cocina chilena contemporánea preparada con ingredientes de productores locales.',
       email: 'contacto@casaorigen.cl',
       phone: '+56 2 2345 6789',
-      whatsapp: '+56912345678',
+      whatsapp: '+56920499873',
       address: 'Av. Providencia 1234, Providencia, Santiago',
       instagramUrl: 'https://instagram.com/casaorigen',
       acceptingOrders: true,
       defaultDeliveryFee: 2500,
       freeDeliveryFrom: 35000,
-      minOrderAmount: 8000,
+      minOrderAmount: 0,
       defaultPrepMinutes: 25,
       deliveryEtaMinutes: 45,
       pickupEtaMinutes: 20,
@@ -53,41 +54,57 @@ async function seedSettings() {
 async function seedPaymentMethods() {
   const methods = [
     {
+      code: PaymentMethodCode.TRANSFER,
+      name: 'Transferencia',
+      requiresChange: false,
+      isActive: true,
+      sortOrder: 1,
+      description: 'No transfieras todavía.',
+      instructions:
+        'Confirmas el pedido, te escribimos por WhatsApp para revisar que esté todo disponible y ahí te pasamos los datos bancarios. Recién entonces transfieres y nos mandas el comprobante.',
+    },
+    {
       code: PaymentMethodCode.CASH,
       name: 'Efectivo',
       requiresChange: true,
-      sortOrder: 1,
+      isActive: true,
+      sortOrder: 2,
       description: 'Paga al recibir tu pedido.',
+      instructions: null,
     },
+    // Los pedidos viejos apuntan a estos métodos (relación Restrict), así que
+    // se desactivan en vez de borrarse.
     {
       code: PaymentMethodCode.DEBIT,
       name: 'Débito',
       requiresChange: false,
-      sortOrder: 2,
+      isActive: false,
+      sortOrder: 3,
       description: 'Máquina POS a domicilio.',
+      instructions: null,
     },
     {
       code: PaymentMethodCode.CREDIT,
       name: 'Crédito',
       requiresChange: false,
-      sortOrder: 3,
-      description: 'Máquina POS a domicilio.',
-    },
-    {
-      code: PaymentMethodCode.TRANSFER,
-      name: 'Transferencia',
-      requiresChange: false,
+      isActive: false,
       sortOrder: 4,
-      description: 'Te enviaremos los datos bancarios al confirmar.',
-      instructions:
-        'Casa Origen SpA · RUT 77.123.456-7 · Banco de Chile · Cuenta Corriente 000-12345-67 · pagos@casaorigen.cl',
+      description: 'Máquina POS a domicilio.',
+      instructions: null,
     },
   ];
 
   for (const method of methods) {
     await prisma.paymentMethod.upsert({
       where: { code: method.code },
-      update: { name: method.name, description: method.description, sortOrder: method.sortOrder },
+      update: {
+        name: method.name,
+        description: method.description,
+        instructions: method.instructions,
+        requiresChange: method.requiresChange,
+        isActive: method.isActive,
+        sortOrder: method.sortOrder,
+      },
       create: method,
     });
   }
@@ -112,33 +129,46 @@ async function seedBusinessHours() {
 async function seedCommunes() {
   // Localities served inside the comuna of Paine, ordered from the town centre
   // outwards — the fee and the extra minutes both track that distance.
+  // `slug` is pinned instead of derived from `name` so that rewording a
+  // locality renames the existing row: deriving it would mint a second row and
+  // retire the original, splitting the delivery zone in two.
+  // `minOrder: 0` everywhere: there is no minimum order. It is zeroed in the
+  // data instead of hidden in the UI, so `pricing.service` cannot reject a cart
+  // over a threshold the storefront never showed.
   const communes = [
-    { name: 'Paine Centro', deliveryFee: 1500, minOrder: 8000, extraMinutes: 0 },
-    { name: 'Huelquén', deliveryFee: 2500, minOrder: 10000, extraMinutes: 10 },
-    { name: 'Champa', deliveryFee: 2500, minOrder: 10000, extraMinutes: 10 },
-    { name: 'Hospital', deliveryFee: 2800, minOrder: 10000, extraMinutes: 12 },
-    { name: 'Viluco', deliveryFee: 2200, minOrder: 9000, extraMinutes: 8 },
-    { name: 'Chada', deliveryFee: 3200, minOrder: 12000, extraMinutes: 18 },
-    { name: 'Valdivia de Paine', deliveryFee: 2800, minOrder: 10000, extraMinutes: 12 },
-    { name: 'Águila Sur', deliveryFee: 3000, minOrder: 12000, extraMinutes: 15 },
-    { name: 'Águila Norte', deliveryFee: 3000, minOrder: 12000, extraMinutes: 15 },
-    { name: 'Angostura', deliveryFee: 3500, minOrder: 12000, extraMinutes: 20 },
+    { slug: 'paine-centro', name: 'Paine Centro', deliveryFee: 1500, minOrder: 0, extraMinutes: 0 },
+    {
+      slug: 'viluco',
+      name: 'Viluco (hasta el retén)',
+      deliveryFee: 2200,
+      minOrder: 0,
+      extraMinutes: 8,
+    },
+    {
+      slug: 'huelquen',
+      name: 'Huelquén (hasta el retén)',
+      deliveryFee: 2500,
+      minOrder: 0,
+      extraMinutes: 10,
+    },
+    { slug: 'champa', name: 'Champa', deliveryFee: 2500, minOrder: 0, extraMinutes: 10 },
+    { slug: 'hospital', name: 'Hospital', deliveryFee: 2800, minOrder: 0, extraMinutes: 12 },
   ];
 
-  const slugs = communes.map((commune) => slugify(commune.name));
+  const slugs = communes.map((commune) => commune.slug);
 
   for (const [index, commune] of communes.entries()) {
-    const slug = slugify(commune.name);
     await prisma.commune.upsert({
-      where: { slug },
+      where: { slug: commune.slug },
       update: {
+        name: commune.name,
         deliveryFee: commune.deliveryFee,
         minOrder: commune.minOrder,
         extraMinutes: commune.extraMinutes,
         sortOrder: index,
         isActive: true,
       },
-      create: { ...commune, slug, sortOrder: index },
+      create: { ...commune, sortOrder: index },
     });
   }
 
@@ -169,24 +199,20 @@ async function seedTagsAndIngredients() {
   }
 
   const ingredients = [
-    { name: 'Tomate', isAllergen: false },
-    { name: 'Cebolla', isAllergen: false },
-    { name: 'Cilantro', isAllergen: false },
-    { name: 'Palta', isAllergen: false },
-    { name: 'Queso', isAllergen: true },
-    { name: 'Mayonesa', isAllergen: true },
-    { name: 'Ají verde', isAllergen: false },
-    { name: 'Mantequilla', isAllergen: true },
-    { name: 'Frutos secos', isAllergen: true },
-    { name: 'Pimentón', isAllergen: false },
-    { name: 'Choclo', isAllergen: false },
-    { name: 'Merkén', isAllergen: false },
+    { name: 'Pomodoro', isAllergen: false },
+    { name: 'Mozzarella', isAllergen: true },
+    { name: 'Pepperoni', isAllergen: false },
     { name: 'Aceituna', isAllergen: false },
+    { name: 'Tomate cherry', isAllergen: false },
+    { name: 'Jamón pierna', isAllergen: false },
+    { name: 'Salame', isAllergen: false },
+    { name: 'Tocino', isAllergen: false },
+    { name: 'Carne mechada', isAllergen: false },
+    { name: 'Pimentón', isAllergen: false },
+    { name: 'Cebolla morada', isAllergen: false },
+    { name: 'Albahaca', isAllergen: false },
     { name: 'Champiñón', isAllergen: false },
-    { name: 'Jamón', isAllergen: false },
-    { name: 'Piña', isAllergen: false },
-    { name: 'Orégano', isAllergen: false },
-    { name: 'Ajo', isAllergen: false },
+    { name: 'Choclo', isAllergen: false },
   ];
 
   for (const ingredient of ingredients) {
@@ -198,25 +224,45 @@ async function seedTagsAndIngredients() {
   }
 }
 
-async function seedExtras() {
-  const extras = [
-    { name: 'Queso extra', price: 1500 },
-    { name: 'Palta extra', price: 2000 },
-    { name: 'Huevo frito', price: 1200 },
-    { name: 'Tocino', price: 2200 },
-    { name: 'Salsa de la casa', price: 900 },
-    { name: 'Papas fritas', price: 3500 },
-    { name: 'Ensalada chilena', price: 2800 },
-    { name: 'Pebre', price: 800 },
-  ];
+/** Add-on prices, straight from the carta: $700 on a 24 cm, $1.000 on a 32 cm. */
+const EXTRA_PRICE_24 = 700;
+const EXTRA_PRICE_32 = 1000;
 
-  for (const [index, extra] of extras.entries()) {
+/** The carta's add-ons, in its own order. Every one costs the same; what moves
+ *  the price is the pizza size, so the amount lives on the size option
+ *  (`VariantOption.extraPrice`) and `price` here is only the 24 cm fallback for
+ *  a product sold without sizes. */
+const PIZZA_EXTRAS = [
+  'Cebolla morada',
+  'Tomate cherry',
+  'Extra queso',
+  'Champiñón',
+  'Pimentón',
+  'Aceituna',
+  'Choclo',
+  'Tocino',
+  'Jamón pierna',
+  'Salame',
+  'Pepperoni',
+];
+
+async function seedExtras() {
+  const slugs = PIZZA_EXTRAS.map(slugify);
+
+  for (const [index, name] of PIZZA_EXTRAS.entries()) {
     await prisma.extra.upsert({
-      where: { slug: slugify(extra.name) },
-      update: { price: extra.price },
-      create: { ...extra, slug: slugify(extra.name), sortOrder: index },
+      where: { slug: slugify(name) },
+      update: { name, price: EXTRA_PRICE_24, isActive: true, sortOrder: index },
+      create: { name, slug: slugify(name), price: EXTRA_PRICE_24, sortOrder: index },
     });
   }
+
+  // Add-ons from the pre-carta seed (Palta extra, Pebre, Papas fritas…) are
+  // retired, not deleted: `order_item_extras` points at them.
+  await prisma.extra.updateMany({
+    where: { slug: { notIn: slugs } },
+    data: { isActive: false },
+  });
 }
 
 type ProductSeed = {
@@ -230,7 +276,10 @@ type ProductSeed = {
   image: string;
   tags?: string[];
   ingredients?: string[];
-  variants?: { name: string; options: { name: string; priceDelta: number; isDefault?: boolean }[] }[];
+  variants?: {
+    name: string;
+    options: { name: string; priceDelta: number; extraPrice?: number; isDefault?: boolean }[];
+  }[];
   extras?: string[];
 };
 
@@ -242,16 +291,17 @@ type CategorySeed = {
   products?: ProductSeed[];
 };
 
-const PIZZA_SIZE_VARIANT = {
+// Two sizes, and the jump to 32 cm is not the same for every pizza: the carta
+// prices each pair on its own, so the delta is a per-product argument instead
+// of the shared constant this used to be. `extraPrice` rides along because the
+// carta also charges add-ons by size, not by add-on.
+const pizzaSizes = (deltaTo32: number) => ({
   name: 'Tamaño',
   options: [
-    { name: 'Personal 25cm', priceDelta: 0, isDefault: true },
-    { name: 'Mediana 30cm', priceDelta: 3500 },
-    { name: 'Familiar 40cm', priceDelta: 7500 },
+    { name: '24 cm', priceDelta: 0, extraPrice: EXTRA_PRICE_24, isDefault: true },
+    { name: '32 cm', priceDelta: deltaTo32, extraPrice: EXTRA_PRICE_32 },
   ],
-};
-
-const PIZZA_EXTRAS = ['Queso extra', 'Tocino', 'Palta extra'];
+});
 
 const CATALOGUE: CategorySeed[] = [
   {
@@ -260,112 +310,139 @@ const CATALOGUE: CategorySeed[] = [
     icon: 'Pizza',
     products: [
       {
-        name: 'Margherita',
-        shortDescription: 'Tomate, mozzarella y albahaca',
-        description: 'La clásica: salsa de tomate natural, mozzarella fresca, albahaca y un hilo de aceite de oliva.',
-        price: 8900,
+        name: 'Pepperoni',
+        shortDescription: 'Pomodoro, mozzarella, pepperoni y aceituna',
+        description: 'Pomodoro, mozzarella, pepperoni y aceituna.',
+        price: 5500,
         prepMinutes: 20,
         isFeatured: true,
-        image: 'https://images.unsplash.com/photo-1595854341625-f33ee10dbf94?auto=format&fit=crop&w=1200&q=80',
-        tags: ['Vegetariano', 'Más vendido'],
-        ingredients: ['Tomate', 'Queso'],
+        image: '/menu/pepperoni.jpg',
+        ingredients: ['Pomodoro', 'Mozzarella', 'Pepperoni', 'Aceituna'],
         extras: PIZZA_EXTRAS,
-        variants: [PIZZA_SIZE_VARIANT],
+        variants: [pizzaSizes(4500)],
       },
       {
         name: 'Napolitana',
-        shortDescription: 'Tomate, mozzarella, ajo y aceituna',
-        description: 'Salsa de tomate, mozzarella, ajo laminado, aceitunas y orégano fresco.',
-        price: 9500,
+        shortDescription: 'Pomodoro, mozzarella, tomate cherry, jamón pierna y aceituna',
+        description: 'Pomodoro, mozzarella, tomate cherry, jamón pierna y aceituna.',
+        price: 6000,
         prepMinutes: 20,
-        image: 'https://images.unsplash.com/photo-1604068549290-dea0e4a305ca?auto=format&fit=crop&w=1200&q=80',
-        tags: ['Vegetariano'],
-        ingredients: ['Tomate', 'Queso', 'Aceituna', 'Ajo'],
+        image: '/menu/napolitana.jpg',
+        ingredients: ['Pomodoro', 'Mozzarella', 'Tomate cherry', 'Jamón pierna', 'Aceituna'],
         extras: PIZZA_EXTRAS,
-        variants: [PIZZA_SIZE_VARIANT],
+        variants: [pizzaSizes(4000)],
       },
       {
-        name: 'Pepperoni',
-        shortDescription: 'Doble pepperoni y mozzarella',
-        description: 'Salsa de tomate, abundante mozzarella y doble capa de pepperoni horneado hasta dorar.',
-        price: 10900,
+        name: 'Tres Carnes',
+        shortDescription: 'Pomodoro, mozzarella, jamón pierna, salame y tocino',
+        description: 'Pomodoro, mozzarella, jamón pierna, salame y tocino.',
+        price: 6500,
         prepMinutes: 22,
         isFeatured: true,
-        image: 'https://images.unsplash.com/photo-1628840042765-356cda07504e?auto=format&fit=crop&w=1200&q=80',
-        tags: ['Más vendido'],
-        ingredients: ['Tomate', 'Queso'],
+        image: '/menu/tres-carnes.jpg',
+        ingredients: ['Pomodoro', 'Mozzarella', 'Jamón pierna', 'Salame', 'Tocino'],
         extras: PIZZA_EXTRAS,
-        variants: [PIZZA_SIZE_VARIANT],
+        variants: [pizzaSizes(4500)],
       },
       {
-        name: 'Hawaiana',
-        shortDescription: 'Jamón y piña',
-        description: 'Salsa de tomate, mozzarella, jamón artesanal y piña caramelizada al horno.',
-        price: 10500,
-        prepMinutes: 20,
-        image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=1200&q=80',
-        ingredients: ['Tomate', 'Queso', 'Jamón', 'Piña'],
-        extras: PIZZA_EXTRAS,
-        variants: [PIZZA_SIZE_VARIANT],
-      },
-      {
-        name: 'Cuatro Quesos',
-        shortDescription: 'Mozzarella, parmesano, gorgonzola y provolone',
-        description: 'Base blanca con cuatro quesos gratinados: mozzarella, parmesano, gorgonzola y provolone.',
-        price: 11900,
-        offerPrice: 10500,
-        prepMinutes: 22,
-        image: 'https://images.unsplash.com/photo-1571407970349-bc81e7e96d47?auto=format&fit=crop&w=1200&q=80',
-        tags: ['Vegetariano', 'Recomendado'],
-        ingredients: ['Queso'],
-        extras: PIZZA_EXTRAS,
-        variants: [PIZZA_SIZE_VARIANT],
-      },
-      {
-        name: 'Vegetariana',
-        shortDescription: 'Pimentón, champiñón, cebolla y aceituna',
-        description: 'Salsa de tomate, mozzarella, pimentón, champiñón salteado, cebolla morada y aceitunas.',
-        price: 10500,
-        prepMinutes: 22,
-        image: 'https://images.unsplash.com/photo-1511689660979-10d2b1aada49?auto=format&fit=crop&w=1200&q=80',
-        tags: ['Vegetariano'],
-        ingredients: ['Tomate', 'Queso', 'Pimentón', 'Champiñón', 'Cebolla', 'Aceituna'],
-        extras: PIZZA_EXTRAS,
-        variants: [PIZZA_SIZE_VARIANT],
-      },
-      {
-        name: 'Especial Casa Origen',
-        shortDescription: 'Pepperoni, tocino, champiñón y merkén',
-        description: 'Nuestra firma: pepperoni, tocino ahumado, champiñón salteado, mozzarella y un toque de merkén.',
-        price: 12900,
+        name: 'Mechada',
+        shortDescription: 'Pomodoro, mozzarella, carne mechada, pimentón y cebolla morada',
+        description: 'Pomodoro, mozzarella, carne mechada, pimentón y cebolla morada.',
+        price: 7500,
         prepMinutes: 25,
         isFeatured: true,
-        image: 'https://images.unsplash.com/photo-1534308983496-4fabb1a015ee?auto=format&fit=crop&w=1200&q=80',
-        tags: ['Nuevo', 'Picante'],
-        ingredients: ['Tomate', 'Queso', 'Champiñón', 'Merkén'],
+        image: '/menu/mechada.jpg',
+        ingredients: ['Pomodoro', 'Mozzarella', 'Carne mechada', 'Pimentón', 'Cebolla morada'],
         extras: PIZZA_EXTRAS,
-        variants: [PIZZA_SIZE_VARIANT],
+        variants: [pizzaSizes(5000)],
+      },
+      {
+        name: 'Cherry Margarita',
+        shortDescription: 'Pomodoro, mozzarella, tomate cherry y albahaca',
+        description: 'Pomodoro, mozzarella, tomate cherry y albahaca.',
+        price: 5500,
+        prepMinutes: 20,
+        isFeatured: true,
+        image: '/menu/cherry-margarita.jpg',
+        tags: ['Vegetariano'],
+        ingredients: ['Pomodoro', 'Mozzarella', 'Tomate cherry', 'Albahaca'],
+        extras: PIZZA_EXTRAS,
+        variants: [pizzaSizes(4500)],
+      },
+      {
+        name: 'Rústica',
+        shortDescription: 'Pomodoro, mozzarella, champiñón, salame y aceituna',
+        description: 'Pomodoro, mozzarella, champiñón, salame y aceituna.',
+        price: 6000,
+        prepMinutes: 22,
+        image: '/menu/rustica.jpg',
+        ingredients: ['Pomodoro', 'Mozzarella', 'Champiñón', 'Salame', 'Aceituna'],
+        extras: PIZZA_EXTRAS,
+        variants: [pizzaSizes(4000)],
+      },
+      {
+        name: 'La Huerta',
+        shortDescription:
+          'Pomodoro, mozzarella, champiñón, cebolla morada, pimentón, choclo y aceituna',
+        description:
+          'Pomodoro, mozzarella, champiñón, cebolla morada, pimentón, choclo y aceituna.',
+        price: 6000,
+        prepMinutes: 22,
+        image: '/menu/la-huerta.jpg',
+        tags: ['Vegetariano'],
+        ingredients: [
+          'Pomodoro',
+          'Mozzarella',
+          'Champiñón',
+          'Cebolla morada',
+          'Pimentón',
+          'Choclo',
+          'Aceituna',
+        ],
+        extras: PIZZA_EXTRAS,
+        variants: [pizzaSizes(4500)],
+      },
+    ],
+  },
+  {
+    name: 'Bebidas',
+    description: 'Para acompañar',
+    icon: 'CupSoda',
+    products: [
+      {
+        name: 'Coca-Cola Zero',
+        shortDescription: 'Lata 350 cc',
+        description: 'Lata de 350 cc, bien fría.',
+        price: 1200,
+        // Nothing to cook: it comes out of the fridge with the pizza.
+        prepMinutes: 0,
+        image: '/menu/coca-cola-zero.jpg',
       },
     ],
   },
 ];
 
-async function upsertProduct(
-  product: ProductSeed,
-  categoryId: string,
-  sortOrder: number,
-) {
+async function upsertProduct(product: ProductSeed, categoryId: string, sortOrder: number) {
   const slug = slugify(product.name);
 
   const record = await prisma.product.upsert({
     where: { slug },
     update: {
+      // Everything the carta owns is repeated here: a product that survives a
+      // menu change by slug (Pepperoni, Napolitana) has to pick up the new
+      // copy and the new price without resetting the database. `isFeatured` is
+      // deliberately absent — the admin curates it with the star toggle and a
+      // re-seed must not undo that.
+      name: product.name,
+      shortDescription: product.shortDescription,
+      description: product.description,
       price: product.price,
       offerPrice: product.offerPrice ?? null,
+      prepMinutes: product.prepMinutes,
       categoryId,
       sortOrder,
-      // Kept in the update branch too: a dead photo URL has to be fixable by
-      // re-running the seed, not only by resetting the database.
+      isActive: true,
+      isVisible: true,
       image: product.image,
     },
     create: {
@@ -387,11 +464,13 @@ async function upsertProduct(
 
   await prisma.productImage.deleteMany({ where: { productId: record.id } });
   await prisma.productImage.createMany({
-    data: [
-      { productId: record.id, url: product.image, alt: product.name, sortOrder: 0 },
-    ],
+    data: [{ productId: record.id, url: product.image, alt: product.name, sortOrder: 0 }],
   });
 
+  // Cleared before re-linking, not merged: a recipe that loses an ingredient or
+  // a tag has to lose it in the database too. `createMany` alone only ever adds
+  // (precedent: Napolitana kept "Vegetariano" after it gained jamón pierna).
+  await prisma.productTag.deleteMany({ where: { productId: record.id } });
   if (product.tags?.length) {
     const tags = await prisma.tag.findMany({
       where: { slug: { in: product.tags.map(slugify) } },
@@ -403,6 +482,7 @@ async function upsertProduct(
     });
   }
 
+  await prisma.productIngredient.deleteMany({ where: { productId: record.id } });
   if (product.ingredients?.length) {
     const ingredients = await prisma.ingredient.findMany({
       where: { slug: { in: product.ingredients.map(slugify) } },
@@ -417,18 +497,25 @@ async function upsertProduct(
     });
   }
 
+  await prisma.productExtra.deleteMany({ where: { productId: record.id } });
   if (product.extras?.length) {
+    const wanted = product.extras.map(slugify);
     const extras = await prisma.extra.findMany({
-      where: { slug: { in: product.extras.map(slugify) } },
-      select: { id: true },
+      where: { slug: { in: wanted } },
+      select: { id: true, slug: true },
     });
+    // Re-sorted against the seed's own list before writing `sortOrder`:
+    // `findMany` answers in whatever order Postgres feels like, so taking the
+    // row index straight from it shuffled the add-ons out of carta order.
+    const inCartaOrder = [...extras].sort(
+      (a, b) => wanted.indexOf(a.slug) - wanted.indexOf(b.slug),
+    );
     await prisma.productExtra.createMany({
-      data: extras.map((extra, index) => ({
+      data: inCartaOrder.map((extra, index) => ({
         productId: record.id,
         extraId: extra.id,
         sortOrder: index,
       })),
-      skipDuplicates: true,
     });
   }
 
@@ -445,6 +532,7 @@ async function upsertProduct(
               data: group.options.map((option, optionIndex) => ({
                 name: option.name,
                 priceDelta: option.priceDelta,
+                extraPrice: option.extraPrice ?? null,
                 isDefault: option.isDefault ?? false,
                 sortOrder: optionIndex,
               })),
@@ -494,6 +582,19 @@ async function seedCatalogue() {
       }
     }
   }
+
+  // Anything seeded by an older carta is retired, not deleted: `order_items`
+  // point at these rows. `isActive: false` already hides them from the menu,
+  // from the highlights and from the admin list.
+  const currentSlugs = CATALOGUE.flatMap((category) => [
+    ...(category.products ?? []),
+    ...(category.children ?? []).flatMap((child) => child.products),
+  ]).map((product) => slugify(product.name));
+
+  await prisma.product.updateMany({
+    where: { slug: { notIn: currentSlugs } },
+    data: { isActive: false, isVisible: false, isFeatured: false },
+  });
 }
 
 async function seedBanners() {
@@ -501,23 +602,18 @@ async function seedBanners() {
     {
       title: 'Cocina de origen',
       subtitle: 'Productos de temporada, técnica clásica y fuego lento.',
-      image:
-        'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=2000&q=80',
+      // Foto propia (public/hero/), no Unsplash: un 404 de imagen en el hero es
+      // `Runtime Error: [object Event]` sin stack. Es vertical, así que el marco
+      // del hero es cuadrado y recorta arriba y abajo por igual.
+      image: '/hero/margarita.jpg',
       ctaLabel: 'Ver el menú',
       ctaHref: '/#menu',
       placement: BannerPlacement.HERO,
       sortOrder: 0,
     },
-    {
-      title: 'Delivery gratis sobre $35.000',
-      subtitle: 'En Providencia, Ñuñoa y Santiago Centro.',
-      image:
-        'https://images.unsplash.com/photo-1526367790999-0150786686a2?auto=format&fit=crop&w=2000&q=80',
-      ctaLabel: 'Pedir ahora',
-      ctaHref: '/#menu',
-      placement: BannerPlacement.MENU_TOP,
-      sortOrder: 0,
-    },
+    // Sin banner MENU_TOP: no hay sección que lo renderice y el único que había
+    // apuntaba a Unsplash, que se cae sin aviso. Un 404 de imagen es
+    // `Runtime Error: [object Event]` sin stack. Todo asset va en `public/`.
   ];
 
   for (const banner of banners) {

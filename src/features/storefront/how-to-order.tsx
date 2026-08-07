@@ -7,9 +7,9 @@ type Props = {
 };
 
 /**
- * Confirming a cart opens WhatsApp with the order detail. That is unusual
- * enough that it needs saying up front — otherwise the tab switch reads as a
- * bug and people abandon on the last click.
+ * Confirming a cart saves the order and then offers a WhatsApp link to send it.
+ * That extra tap is unusual enough that it needs saying up front — otherwise
+ * the leap to another app reads as a bug on the last click.
  */
 export function HowToOrder({ whatsappEnabled }: Props) {
   const steps = [
@@ -25,15 +25,15 @@ export function HowToOrder({ whatsappEnabled }: Props) {
     },
     {
       icon: MessageCircle,
-      title: whatsappEnabled ? 'Cerramos por WhatsApp' : 'Nosotros te llamamos',
+      title: whatsappEnabled ? 'Nos lo envías por WhatsApp' : 'Nosotros te llamamos',
       body: whatsappEnabled
-        ? 'Al confirmar se abre WhatsApp con tu pedido listo para enviar. Ahí coordinamos la entrega.'
+        ? 'Guardamos tu pedido y te mostramos un botón para enviárnoslo por WhatsApp. Ahí coordinamos la entrega.'
         : 'Recibimos tu pedido y te contactamos al teléfono que dejaste para coordinar la entrega.',
     },
   ];
 
   return (
-    <section className="border-border bg-secondary/40 border-y">
+    <section id="como-pedir" className="border-border bg-secondary/40 scroll-mt-28 border-y">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <h2 className="font-display mb-1 text-2xl font-bold">Pedir es así de simple</h2>
         <p className="text-muted-foreground mb-8 text-sm">Tres pasos, menos de un minuto.</p>
