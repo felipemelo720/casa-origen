@@ -60,6 +60,18 @@ if [[ -n $(git status --porcelain) ]]; then
   die 'working tree is dirty — refusing to pull over local changes'
 fi
 
+# Different is not the same as behind. A commit made on this box and never
+# pushed leaves HEAD *ahead* of the remote, and the old `!=` test read that as
+# "main moved": the pull then reported "already up to date" and the script
+# rebuilt its way to the exact tree it started from. Worse, once the histories
+# diverge, `pull --ff-only` fails halfway through a deploy.
+#
+# Requiring a strict fast-forward also keeps step 2 honest: after the pull HEAD
+# is exactly $remote_sha, which is the commit whose CI result was checked.
+if ! git merge-base --is-ancestor "$local_sha" "$remote_sha"; then
+  die "local ${local_sha:0:7} is not an ancestor of origin/$BRANCH (${remote_sha:0:7}) — histories diverged, refusing to deploy"
+fi
+
 log "main moved: ${local_sha:0:7} -> ${remote_sha:0:7}"
 
 # --- 2. Did CI pass for that exact commit? ---------------------------------
@@ -125,16 +137,50 @@ rollback() {
   rolled_back=1
   log "ROLLBACK to ${local_sha:0:7}"
   git reset --hard --quiet "$local_sha" || log 'rollback: git reset failed'
-  npm ci --silent || log 'rollback: npm ci failed'
-  rm -rf .next
-  [[ -d .next.prev ]] && mv .next.prev .next
+  npm ci --include=dev --silent || log 'rollback: npm ci failed'
+
+  # Only touch .next when there is something to put back. Most of the steps
+  # that can fail — the pull, the install, the migration — run *before*
+  # .next.prev exists, and at that point .next is still the build that is
+  # serving traffic. Deleting it there took production down on 2026-08-08:
+  # the log said "serving the previous release" while the directory was gone
+  # and pm2 was crash-looping.
+  if [[ -d .next.prev ]]; then
+    rm -rf .next
+    mv .next.prev .next
+    log 'rollback: restored the previous build'
+  else
+    log 'rollback: no previous build to restore — leaving .next as it is'
+  fi
+
   pm2 start "$PM2_APP" >/dev/null || log 'rollback: pm2 start failed'
-  log 'rolled back — production is serving the previous release'
+
+  # Claim nothing that has not been checked. The old wording — "production is
+  # serving the previous release" — was printed unconditionally, including the
+  # run where .next had just been deleted and the site was down.
+  local code=''
+  for _ in {1..10}; do
+    code=$(curl --silent --output /dev/null --max-time 5 --write-out '%{http_code}' "$HEALTH_URL" || true)
+    [[ $code == '200' ]] && break
+    sleep 2
+  done
+  if [[ $code == '200' ]]; then
+    log "rolled back to ${local_sha:0:7} — health check OK"
+  else
+    log "ROLLED BACK BUT STILL DOWN (HTTP ${code:-none}) — needs a human"
+  fi
 }
 trap 'rollback; rm -f "$DEPLOY_SELF_COPY"' ERR
 
 git pull --quiet --ff-only origin "$BRANCH"
-npm ci --silent
+
+# `--include=dev` is not optional here. The systemd unit exports
+# NODE_ENV=production, which makes npm skip devDependencies — but it still
+# runs the `prepare` script, and `prepare` is `husky`, a devDependency. The
+# install then dies with `husky: not found` (exit 127). `next build` needs
+# the dev tree anyway, so ask for it explicitly instead of depending on
+# whatever NODE_ENV the caller happens to have.
+npm ci --include=dev --silent
 
 # Schema changes are the one irreversible step here: `migrate deploy` never
 # rolls back, so a rollback returns the code but leaves the new columns in
