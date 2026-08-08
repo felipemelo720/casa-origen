@@ -899,22 +899,93 @@ habían corrido: los tres commits que los agregaban seguían sin pushear
 - Push de `69fdafc..bf0d0b2`. **Primera corrida de GitHub Actions**, verde
   ([run 31269205271](https://github.com/felipemelo720/casa-origen/actions/runs/31269205271)).
 - `casaorigen-deploy.timer` instalado y habilitado, cada 5 minutos.
-- Corrida real del service verificada, no solo la instalación:
-  `deploy: already at bf0d0b2, nothing to do`.
 
-**Ciclo desde ahora:** push desde cualquier máquina → Actions → el CT
-pregunta cada 5 min si `main` se movió **y** si CI quedó verde → pull +
-`prisma migrate deploy` + build + restart + health check, con rollback
-automático de commit y de `.next` si el health falla. Latencia de punta a
-punta: CI (~4 min) + hasta 5 min de timer + build (~2 min).
+**Se habilitó sin haber probado nunca un deploy real.** Lo único que se había
+visto era `deploy: already at bf0d0b2, nothing to do`, que no ejercita el pull,
+ni el install, ni el build, ni el rollback. La regla de probar la ruta de fallo
+estaba escrita en este mismo repo y no se siguió. El resultado está abajo.
+
+## El primer deploy real tiró producción (2026-08-08)
+
+Cinco minutos caído, de 17:47 a 17:52. Del journal:
+
+```
+17:41:48 deploy: main moved: 0d0ae10 -> bf0d0b2
+17:44:40 sh: 1: husky: not found
+17:44:41 deploy: ROLLBACK to 0d0ae10
+17:47:16 deploy: rolled back — production is serving the previous release
+```
+
+Esa última línea era falsa: `.next` borrado, sin respaldo, pm2 en loop de
+reinicio, `HTTP 000`.
+
+**Cinco defectos, no uno.** Los dos últimos aparecieron recién al correr el
+deploy de verdad; ninguna lectura del script los había mostrado.
+
+1. **`npm ci` sin devDependencies.** La unit exporta `NODE_ENV=production`, npm
+   saltea las dev, pero igual corre `prepare`, que es `husky` — devDependency.
+   Muere con 127. Ningún deploy podía funcionar. Arreglado con
+   `npm ci --include=dev` explícito, en la ruta normal y en el rollback, para no
+   depender del `NODE_ENV` de quien invoque.
+2. **El rollback borraba el build que estaba sirviendo.** Hacía `rm -rf .next` y
+   buscaba un `.next.prev` que se crea mucho después. Casi todo lo que puede
+   fallar —pull, install, migración— pasa antes de ese respaldo. Ahora solo
+   toca `.next` si hay algo que reponer.
+3. **El rollback afirmaba éxito sin comprobarlo.** La frase «serving the
+   previous release» se imprimía siempre. Ahora hace health check con
+   reintentos y, si no responde, loguea `ROLLED BACK BUT STILL DOWN — needs a
+human`.
+4. **Comparaba «distinto», no «atrasado».** Un commit hecho en el servidor y no
+   pusheado dejaba HEAD adelante del remoto y eso se leía como «main moved»:
+   rebuild para llegar al mismo árbol, y con historias divergidas el
+   `pull --ff-only` falla a mitad de deploy. Ahora exige fast-forward con
+   `git merge-base --is-ancestor`, lo que además garantiza que el commit
+   desplegado es exactamente el que CI validó.
+5. **`DATABASE_URL` ausente en `migrate deploy`.** El CLI de Prisma solo
+   auto-carga `.env`; los secretos viven en `.env.production`, que Next lee por
+   su cuenta. Por eso `next build` siempre anduvo y la asimetría era invisible.
+   Estaba tapado por el defecto 1: ningún deploy había llegado tan lejos. Se lee
+   la variable con `sed` en vez de hacer `source`, porque `.env.production`
+   tiene al menos un valor con espacio sin comillas y `source` intentaría
+   ejecutar la segunda palabra.
+
+**Verificado de punta a punta**, con el timer apagado y el servidor puesto un
+commit atrás a propósito: pull → `npm ci` → `migrate deploy` → build → restart →
+`health check OK after 3 attempt(s)` → `deployed abcfcd3`. Recién después se
+volvió a habilitar el timer.
+
+El guard del defecto 2 quedó probado por un fallo genuino, no simulado: la
+corrida que murió en `DATABASE_URL` cayó justo en la ventana que antes era
+letal y el sitio siguió en `HTTP 200`, con el log diciendo
+`no previous build to restore — leaving .next as it is`.
+
+**Ciclo:** push desde cualquier máquina → Actions → el CT pregunta cada 5 min
+si `main` avanzó **y** si CI quedó verde → pull + `prisma migrate deploy` +
+build + restart + health check, con rollback de commit y de `.next` si algo
+falla. Latencia de punta a punta: CI (~4 min) + hasta 5 min de timer + deploy
+(~11 min, casi todo `npm ci` y `next build` en 2 vCPU).
 
 **Tradeoff.** El deploy es pull y no push porque GitHub no llega a este
-contenedor (red privada, sin port-forward). Se paga latencia y una corrida
-cada 5 minutos a cambio de no exponer nada hacia afuera.
+contenedor (red privada, sin port-forward). Se paga latencia y una corrida cada
+5 minutos a cambio de no exponer nada hacia afuera.
 
-**Deuda abierta.** Las credenciales de git son un PAT clásico en
-`/root/.git-credentials` (`chmod 600`), con alcance sobre toda la cuenta y no
-sobre este repo. Reemplazar por deploy key SSH o token fine-grained.
+**Deuda abierta.**
+
+- Las credenciales son un PAT clásico en `/root/.git-credentials` (`chmod 600`),
+  con alcance sobre toda la cuenta y no sobre este repo. Además pasó por un chat
+  con una IA, así que hay que tratarlo como comprometido. Reemplazar por deploy
+  key SSH o token fine-grained.
+- `.gitignore` cubre `.next` pero no `.next.prev`. Si un deploy muere entre el
+  respaldo y la limpieza final —`TimeoutStartSec`, OOM, kill— ese directorio
+  queda como untracked y **todos los deploys siguientes mueren en
+  `working tree is dirty`**. Una línea lo arregla.
+- El deploy tarda ~11 min contra un `TimeoutStartSec=900`. Cuatro minutos de
+  margen.
+- Sin canal de alerta: un deploy fallido solo se ve con
+  `journalctl -u casaorigen-deploy.service`. Ausencia de mensajes no es salud.
+- Falta probar la rama del rollback que **sí** tiene respaldo (falla del build o
+  del health, con `.next.prev` ya creado). Probarla exige tirar el sitio a
+  propósito unos minutos.
 
 ## Infraestructura dev
 
