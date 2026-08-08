@@ -182,6 +182,20 @@ git pull --quiet --ff-only origin "$BRANCH"
 # whatever NODE_ENV the caller happens to have.
 npm ci --include=dev --silent
 
+# The Prisma CLI only auto-loads `.env`, and this project keeps its secrets in
+# `.env.production` — which Next reads by itself, so `next build` was never
+# affected and the gap stayed invisible. Under systemd the migration died with
+# P1012 "Environment variable not found: DATABASE_URL".
+#
+# Read the one variable instead of sourcing the file: `.env.production` holds
+# at least one unquoted value with a space in it, so `source` would try to run
+# the second word as a command and take the deploy down with it.
+if [[ -z ${DATABASE_URL:-} ]]; then
+  DATABASE_URL=$(sed -n 's/^DATABASE_URL=//p' "$REPO_DIR/.env.production" | head -1)
+  [[ -n $DATABASE_URL ]] || die 'no DATABASE_URL in .env.production — cannot migrate'
+  export DATABASE_URL
+fi
+
 # Schema changes are the one irreversible step here: `migrate deploy` never
 # rolls back, so a rollback returns the code but leaves the new columns in
 # place. Additive migrations survive that; a destructive one does not.
