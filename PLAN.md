@@ -854,8 +854,67 @@ el sitio en producción. Sin eso, el resto de las fechas del server (la serie
 diaria de ventas de `/admin`, `createdAt` en `/cuenta`) siguen formateándose en
 UTC.
 
-**Sin desplegar.** El cambio está en el working tree; `casaorigenpizzas.cl`
-sigue sirviendo el build anterior.
+**Desplegado** el 2026-08-08 en el commit `bf0d0b2`, junto con el cambio de
+tema de abajo. Hasta esa fecha estuvo sin desplegar, en el working tree.
+
+## Tema oscuro por defecto en la primera visita (2026-08-08)
+
+**Decisión de producto, no bug.** `AppProviders` arrancaba en `light` con
+`enableSystem={false}`. Ese `light` venía de un arreglo anterior: con
+`defaultTheme="system"`, un Android en modo oscuro recibía la paleta dark sin
+que nadie se lo preguntara. La corrección de entonces apagó `enableSystem` y
+fijó `light`.
+
+**Cambio.** `defaultTheme="dark"` en
+`src/components/providers/app-providers.tsx`. Una sola línea, sin tocar
+tokens: `:root` y `.dark` ya estaban completos, que es la razón por la que el
+cambio es de una línea. `enableSystem` sigue en `false` y next-themes sigue
+recordando la elección explícita: quien ya tocó el toggle y eligió light,
+mantiene light.
+
+**Tradeoff.** La primera visita deja de respetar la preferencia del dispositivo
+para quien tiene el teléfono en modo claro — ve dark hasta que toque el toggle.
+Se acepta porque la paleta pasa a ser una decisión de marca y no algo heredado
+del sistema operativo del visitante. La alternativa honesta era volver a
+`system`, que es justo lo que se descartó antes por dar una paleta que nadie
+pidió.
+
+**Verificado.** `npx tsc --noEmit`, `npm run lint`, `npm run format:check` y
+`npx vitest run` (142 tests, 15 archivos) limpios. Confirmado en el HTML que
+sirve producción, no solo en el fuente: el script inline de next-themes llega
+con `("class","theme","dark",null,["light","dark"],null,false,true)` — tercer
+argumento `defaultTheme`, séptimo `enableSystem`. `GET /` 200 en el puerto 3006.
+
+**Pendiente.** El QA en navegador a 360px/768px/1280px y el recorrido con
+teclado siguen sin hacerse: este CT no tiene Chromium instalado. Es la misma
+deuda que arrastran los dos pasos anteriores.
+
+## CI/CD activado (2026-08-08)
+
+El workflow y el deploy pull-based existían desde el 2026-08-07 pero nunca
+habían corrido: los tres commits que los agregaban seguían sin pushear
+(`origin/main` en `69fdafc`) y las units de systemd estaban en el repo, no en
+`/etc/systemd/system/`.
+
+- Push de `69fdafc..bf0d0b2`. **Primera corrida de GitHub Actions**, verde
+  ([run 31269205271](https://github.com/felipemelo720/casa-origen/actions/runs/31269205271)).
+- `casaorigen-deploy.timer` instalado y habilitado, cada 5 minutos.
+- Corrida real del service verificada, no solo la instalación:
+  `deploy: already at bf0d0b2, nothing to do`.
+
+**Ciclo desde ahora:** push desde cualquier máquina → Actions → el CT
+pregunta cada 5 min si `main` se movió **y** si CI quedó verde → pull +
+`prisma migrate deploy` + build + restart + health check, con rollback
+automático de commit y de `.next` si el health falla. Latencia de punta a
+punta: CI (~4 min) + hasta 5 min de timer + build (~2 min).
+
+**Tradeoff.** El deploy es pull y no push porque GitHub no llega a este
+contenedor (red privada, sin port-forward). Se paga latencia y una corrida
+cada 5 minutos a cambio de no exponer nada hacia afuera.
+
+**Deuda abierta.** Las credenciales de git son un PAT clásico en
+`/root/.git-credentials` (`chmod 600`), con alcance sobre toda la cuenta y no
+sobre este repo. Reemplazar por deploy key SSH o token fine-grained.
 
 ## Infraestructura dev
 
