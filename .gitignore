@@ -38,3 +38,7 @@ backups/*
 
 # Backups de env creados a mano antes de tocar produccion.
 .env*.bak-*
+
+# Base desechable de los tests de integración. Copiar a `.env.test` y
+# ajustar la contraseña a la del contenedor local.
+.env.test

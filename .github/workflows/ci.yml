@@ -50,6 +50,18 @@ jobs:
 
       - run: npm run test
 
+      # Integration tests own a second database in the same service container.
+      # They TRUNCATE between tests, so they must never point at the database
+      # `next build` seeds below — hence the `_test` suffix, which
+      # `tests/setup/db.ts` refuses to run without.
+      - name: Integration tests
+        env:
+          DATABASE_URL: postgresql://casaorigen:casaorigen@localhost:5432/casaorigen_test?schema=public
+        run: |
+          PGPASSWORD=casaorigen psql -h localhost -U casaorigen -d casaorigen \
+            -c 'CREATE DATABASE casaorigen_test'
+          npm run test:int
+
       # Schema first, then catalogue data: the landing renders products,
       # settings and business hours during the build.
       - name: Prepare database
