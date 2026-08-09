@@ -33,9 +33,41 @@ fi
 trap 'rm -f "$DEPLOY_SELF_COPY"' EXIT
 
 log() { printf '%s deploy: %s\n' "$(date -Is)" "$*"; }
+
+# Telegram, best effort. Credentials come from the environment or, failing
+# that, from `.env.production` — same `sed` trick used for DATABASE_URL below,
+# because that file has unquoted values with spaces and `source` would try to
+# execute them.
+#
+# Never fails the deploy: a notification that cannot be sent is a worse
+# outcome than a deploy that dies because Telegram was down.
+notify() {
+  local token="${TELEGRAM_BOT_TOKEN:-}" chat="${TELEGRAM_CHAT_ID:-}"
+
+  if [[ -z $token || -z $chat ]] && [[ -f $REPO_DIR/.env.production ]]; then
+    token=${token:-$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$REPO_DIR/.env.production" | head -1)}
+    chat=${chat:-$(sed -n 's/^TELEGRAM_CHAT_ID=//p' "$REPO_DIR/.env.production" | head -1)}
+  fi
+
+  [[ -n $token && -n $chat ]] || return 0
+
+  curl --silent --output /dev/null --max-time 10 \
+    -X POST "https://api.telegram.org/bot${token}/sendMessage" \
+    --data-urlencode "chat_id=${chat}" \
+    --data-urlencode "text=$*" || log 'notify: telegram unreachable'
+}
+
 die() {
   log "ABORT: $*"
   exit 1
+}
+
+# `die` for the cases that need a human: a dirty tree, diverged histories, no
+# disk. Plain `die` stays silent on purpose — "CI still running" fires on every
+# timer tick, and an alert that cries wolf every five minutes gets muted.
+die_loud() {
+  notify "🚨 Casa Origen — deploy detenido: $*"
+  die "$*"
 }
 
 # Two deploys at once would fight over .next and pm2.
@@ -57,7 +89,7 @@ if [[ $local_sha == "$remote_sha" ]]; then
 fi
 
 if [[ -n $(git status --porcelain) ]]; then
-  die 'working tree is dirty — refusing to pull over local changes'
+  die_loud 'working tree is dirty — refusing to pull over local changes'
 fi
 
 # Different is not the same as behind. A commit made on this box and never
@@ -69,7 +101,7 @@ fi
 # Requiring a strict fast-forward also keeps step 2 honest: after the pull HEAD
 # is exactly $remote_sha, which is the commit whose CI result was checked.
 if ! git merge-base --is-ancestor "$local_sha" "$remote_sha"; then
-  die "local ${local_sha:0:7} is not an ancestor of origin/$BRANCH (${remote_sha:0:7}) — histories diverged, refusing to deploy"
+  die_loud "local ${local_sha:0:7} is not an ancestor of origin/$BRANCH (${remote_sha:0:7}) — histories diverged, refusing to deploy"
 fi
 
 log "main moved: ${local_sha:0:7} -> ${remote_sha:0:7}"
@@ -118,7 +150,7 @@ log "CI green ($successful/$total checks)"
 
 free_mb=$(df --output=avail -m / | tail -1 | tr -d ' ')
 [[ $free_mb -ge $MIN_FREE_MB ]] ||
-  die "only ${free_mb}MB free on /, need ${MIN_FREE_MB}MB to build"
+  die_loud "only ${free_mb}MB free on /, need ${MIN_FREE_MB}MB to build"
 
 if [[ $DRY_RUN == '1' ]]; then
   log "DRY_RUN: would deploy ${remote_sha:0:7}"
@@ -166,8 +198,10 @@ rollback() {
   done
   if [[ $code == '200' ]]; then
     log "rolled back to ${local_sha:0:7} — health check OK"
+    notify "⚠️ Casa Origen — deploy de ${remote_sha:0:7} falló. Rollback a ${local_sha:0:7} OK, el sitio responde."
   else
     log "ROLLED BACK BUT STILL DOWN (HTTP ${code:-none}) — needs a human"
+    notify "🔥 Casa Origen — CAÍDO. Rollback a ${local_sha:0:7} hecho y el sitio NO responde (HTTP ${code:-none}). Revisar ya: journalctl -u casaorigen-deploy.service"
   fi
 }
 trap 'rollback; rm -f "$DEPLOY_SELF_COPY"' ERR
@@ -232,3 +266,4 @@ fi
 trap 'rm -f "$DEPLOY_SELF_COPY"' ERR
 rm -rf .next.prev
 log "deployed ${remote_sha:0:7} — $(git log -1 --pretty=%s)"
+notify "✅ Casa Origen — desplegado ${remote_sha:0:7}: $(git log -1 --pretty=%s)"

@@ -70,3 +70,19 @@ jobs:
           npx prisma db seed
 
       - run: npm run build
+
+      # Telegram beats the failure email: the email lands in a folder nobody
+      # opens on a phone. `if: failure()` also covers a job cancelled by a
+      # previous step dying, which is the case that matters.
+      # No-ops when TG_TOKEN is not set, so a fork does not fail here.
+      - name: Notify Telegram on failure
+        if: failure()
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+        run: |
+          [ -n "$TG_TOKEN" ] || exit 0
+          curl --silent --output /dev/null --max-time 10 \
+            -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHAT}" \
+            --data-urlencode "text=❌ Casa Origen — CI falló en ${GITHUB_REF_NAME} (${GITHUB_SHA:0:7}). No se va a desplegar. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
