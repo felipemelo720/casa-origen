@@ -22,10 +22,10 @@ export function MotorcycleIcon(props: SVGProps<SVGSVGElement>) {
     >
       <circle cx="5.5" cy="17.5" r="3.5" />
       <circle cx="18.5" cy="17.5" r="3.5" />
-      <path d="M5.5 17.5h5.5l3.5-6" />
-      <path d="M10 11.5h5" />
-      <path d="M15.5 7.5h3.5" />
-      <path d="m17 7.5 1.5 10" />
+      <path d="M16.5 9.5h-5L9 12H4" />
+      <path d="M9.5 12v3.5h4l1-3.5" />
+      <path d="m17.5 9 1 5" />
+      <path d="M15.5 8H19" />
     </svg>
   );
 }
