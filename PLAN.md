@@ -981,8 +981,7 @@ contenedor (red privada, sin port-forward). Se paga latencia y una corrida cada
   `working tree is dirty`**. Una línea lo arregla.
 - El deploy tarda ~11 min contra un `TimeoutStartSec=900`. Cuatro minutos de
   margen.
-- Sin canal de alerta: un deploy fallido solo se ve con
-  `journalctl -u casaorigen-deploy.service`. Ausencia de mensajes no es salud.
+- ~~Sin canal de alerta~~ — cerrado el 2026-08-09 con Telegram (abajo).
 - Falta probar la rama del rollback que **sí** tiene respaldo (falla del build o
   del health, con `.next.prev` ya creado). Probarla exige tirar el sitio a
   propósito unos minutos.
@@ -1058,6 +1057,99 @@ constante en el componente, no un campo de `Settings`; cambiarlo hoy pide deploy
 **Sin verificar.** tsc, lint y build limpios, y la sección se ve en el HTML
 servido por 3006. Falta mirarla en browser a 360/768/1280, en claro y oscuro, y
 recorrerla con teclado.
+
+## Tests de integración contra Postgres real (2026-08-09)
+
+**Problema.** Los 142 tests que había son todos unitarios: `pricing.service` y
+`checkout.service` mockean los repositorios, así que verifican la aritmética
+pero nunca ejecutan una query. Una migración que renombre una columna o un
+`select` que deje de traer un campo pasa verde y revienta en producción. Cero
+cobertura de las server actions: authz, zod, rate limit y escritura no se
+probaban en ningún lado.
+
+**Qué se agregó.** Segunda suite, aparte de la unitaria:
+
+- `casaorigen_test`, base propia en el mismo contenedor `co-pg`. El sufijo
+  `_test` no es cosmético: `tests/setup/db.ts` **se niega a truncar** una base
+  cuya `DATABASE_URL` no lo tenga. Es la única defensa entre un `TRUNCATE` y los
+  pedidos de desarrollo.
+- `vitest.integration.config.ts`: `include` en `tests/integration/**/*.itest.ts`
+  (no colisiona con `src/**/*.test.ts` de la unitaria), `fileParallelism: false`
+  porque la base es una sola, y alias de `server-only` a un módulo vacío — eso
+  reemplaza el `vi.mock('server-only')` que cada test unitario repite a mano.
+- `global-setup.ts` corre `migrate deploy` + `db seed` una vez por invocación.
+  El seed es idempotente y tarda segundos; adivinar si el catálogo está al día
+  sale más caro que re-sembrar.
+- `setup-integration.ts` mockea `next/headers` una sola vez para toda la suite
+  contra un store en memoria (`request-context.ts`). Es la frontera real: la
+  cookie de admin y la IP del rate limit salen de ahí. `next/cache` queda en
+  no-op — `revalidatePath` tira fuera de un request de Next.
+- Los ids del catálogo se **leen** de la base (`fixtures.ts`), no se hardcodean:
+  son `cuid()` y cambian en cada siembra.
+
+**Los 6 tests.** `placeOrderAction`: el total lo pone el server ($10.000 de
+Pepperoni 32 cm, el cliente solo mandó ids), `soldCount` sube dentro de la misma
+transacción; DELIVERY con el delivery apagado se rechaza y **no deja fila**;
+carrito vacío muere en zod. `updateBusinessHoursAction`: sin cookie de admin
+tira; con cookie abre un día cerrado (720/1380) y lo vuelve a cerrar. Esto
+último cierra el «sin verificar» del 2026-08-08 — el guardado de horarios ya no
+depende de que alguien abra el panel.
+
+**CI.** Job nuevo entre los unitarios y el build, con su propia base
+(`CREATE DATABASE casaorigen_test`) en el mismo service container. El
+`DATABASE_URL` del step apunta ahí y no al que `next build` siembra.
+
+**Tradeoffs.**
+
+- `npm run test` sigue corriendo en 3s sin pedir nada; `npm run test:int` tarda
+  ~12s y exige Docker levantado. Van separados a propósito: mezclarlos habría
+  matado el chequeo instantáneo.
+- El seed corre en cada invocación (~7s de los 12). Se paga a cambio de que la
+  suite no dependa del estado que dejó la corrida anterior.
+- `.env.test` queda fuera de git (lleva la contraseña del contenedor local);
+  se versiona `.env.test.example`. `loadTestEnv()` devuelve `{}` si el archivo
+  no existe, así CI puede pasar las variables por el workflow.
+
+**Verificado.** `npm run test:int` 6/6, `npm test` 142/142, `tsc --noEmit` y
+`lint` limpios. Base de desarrollo intacta después de correr la suite
+(1 pedido, 13 productos, 7 filas de horario), que es el riesgo real de un
+`TRUNCATE` mal apuntado.
+
+**Falta.** E2E con Playwright (recorrido en navegador, 360/768/1280, dark, axe)
+y smoke de rutas. Ninguna de las dos existe todavía.
+
+## Avisos por Telegram (2026-08-09)
+
+**Problema.** Un CI rojo llegaba solo por mail, y un deploy fallido no llegaba a
+ninguna parte: había que ir a mirar `journalctl`. Ausencia de mensajes se leía
+como salud, que es justo lo que pasó el 2026-08-08 — cinco minutos caído sin que
+nadie se enterara.
+
+**CI** (`.github/workflows/ci.yml`): step final con `if: failure()`, que cubre
+también el job cancelado porque murió un step anterior. Manda rama, sha corto y
+link a la corrida. Si `TG_TOKEN` no está seteado el step sale con 0 y no rompe
+nada (un fork no tiene los secrets).
+
+**Deploy** (`scripts/deploy.sh`): función `notify()`, best effort — Telegram
+caído nunca puede tumbar un deploy. Cuatro avisos:
+
+| Evento                           | Mensaje                                        |
+| -------------------------------- | ---------------------------------------------- |
+| Deploy OK                        | ✅ sha + subject del commit                    |
+| Falló y el rollback repuso       | ⚠️ sitio respondiendo                          |
+| Falló y el sitio **no** responde | 🔥 «revisar ya»                                |
+| Deploy detenido (`die_loud`)     | 🚨 tree sucio, historias divergidas, sin disco |
+
+**Lo que deliberadamente no avisa.** `die` a secas queda mudo: «CI still
+running» y «no CI run reported yet» son estados normales entre el push y el
+verde de Actions, y el timer corre cada 5 minutos. Una alerta que suena cada
+cinco minutos se silencia, y con ella se pierden las que importan. Por eso hay
+dos funciones (`die` / `die_loud`) y no un flag.
+
+**Credenciales.** `TG_TOKEN` y `TG_CHAT` como secrets del repo;
+`TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` en `.env.production` del CT, leídos
+con `sed` y no con `source` — ese archivo tiene valores sin comillas con
+espacios, mismo motivo por el que `DATABASE_URL` se lee así.
 
 ## Infraestructura dev
 
