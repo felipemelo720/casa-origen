@@ -1030,6 +1030,35 @@ tildar y destildar un día contra la DB real.
 (decisión del 2026-08-04, más arriba). Estos horarios son vitrina: cambiarlos no
 abre ni cierra la tienda, eso lo sigue haciendo `acceptingOrders`.
 
+## Pedidos para eventos (2026-08-09)
+
+**Problema.** El carrito sirve para una pizza, no para veinte. Quien organiza un
+cumpleaños o un pedido de oficina no sabe cuántas pedir, quiere precio antes de
+comprometerse y necesita fijar día y hora. Ese pedido hoy no existía en la
+landing: o se iba, o escribía por WhatsApp sin que la página lo invitara.
+
+**Qué se hizo.** `src/features/storefront/event-orders.tsx`, server component,
+montado en `src/app/(storefront)/page.tsx` **después** del menú y antes de
+`HowToOrder`. Card con dos objeciones respondidas (desde 5 pizzas, avisar con un
+día) y un solo CTA a WhatsApp con mensaje prellenado
+(`Somos ___ personas, el día ___ a las ___ hrs`). Sin número configurado cae a
+`tel:`; sin número ni teléfono la sección no se renderiza — un CTA muerto es peor
+que no tener sección.
+
+**Cero backend.** No hay tabla, ni action, ni service, ni migración. El pedido de
+evento vive en la conversación de WhatsApp. Cero JS de cliente: el First Load JS
+de `/` no se movió.
+
+**Tradeoff aceptado.** El pedido de evento **no queda en Postgres**, contra la
+regla general de que WhatsApp es aviso y no fuente de verdad. Se aceptó porque
+todavía no se sabe si alguien lo va a usar: primero medir, y si entra volumen,
+recién ahí tabla `EventQuote` + action + service. El mínimo de 5 pizzas es una
+constante en el componente, no un campo de `Settings`; cambiarlo hoy pide deploy.
+
+**Sin verificar.** tsc, lint y build limpios, y la sección se ve en el HTML
+servido por 3006. Falta mirarla en browser a 360/768/1280, en claro y oscuro, y
+recorrerla con teclado.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros

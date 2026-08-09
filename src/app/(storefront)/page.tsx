@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { ClosedNotice } from '@/components/shared/closed-notice';
 import { ProductCard } from '@/features/catalog/product-card';
 import { DeliveryChecker } from '@/features/delivery/delivery-checker';
+import { EventOrders } from '@/features/storefront/event-orders';
 import { StorefrontHero } from '@/features/storefront/hero';
 import { HowToOrder } from '@/features/storefront/how-to-order';
 import { OpeningHours } from '@/features/storefront/opening-hours';
@@ -134,6 +135,14 @@ export default async function HomePage() {
           </div>
         ))}
       </section>
+
+      {/* After the menu on purpose: it only makes sense once you have seen what
+          a pizza costs, and it must not push the carta further down. */}
+      <EventOrders
+        restaurantName={settings.name}
+        whatsapp={settings.whatsapp}
+        phone={settings.phone}
+      />
 
       <HowToOrder whatsappEnabled={Boolean(settings.whatsapp)} />
 
