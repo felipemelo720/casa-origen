@@ -78,12 +78,8 @@ export async function updateBusinessHoursAction(formData: FormData): Promise<voi
     'SATURDAY',
   ] as const;
 
-  // Start from all 7 days as closed: a closed day renders no <input> in the
-  // form (nothing to edit), so it never shows up in `formData.entries()`.
-  // Building the array only from what's submitted left it short of 7
-  // whenever any day was closed, and `businessHoursSchema.length(7)` threw
-  // an uncaught ZodError — every save crashed with a 500 on a week that had
-  // a closed day, which is the normal case here (Monday).
+  // Arrancar con los 7 días en null y llenarlos desde el form: el array
+  // siempre tiene largo 7, que es lo que exige `businessHoursSchema.length(7)`.
   const days: Record<
     number,
     { dayOfWeek: (typeof dayOfWeekMap)[number]; opensAt: string | null; closesAt: string | null }
@@ -97,9 +93,21 @@ export async function updateBusinessHoursAction(formData: FormData): Promise<voi
     if (match && match[1] && match[2]) {
       const dayNum = Number(match[1]);
       const field = match[2];
-      if (days[dayNum]) {
-        days[dayNum][field as 'opensAt' | 'closesAt'] = String(value || null);
-      }
+      const day = days[dayNum];
+      // Un input vacío es `''`: `String(value || null)` daba la *cadena*
+      // `'null'` y reventaba el regex de zod. Vacío significa sin hora.
+      if (day) day[field as 'opensAt' | 'closesAt'] = value ? String(value) : null;
+    }
+  }
+
+  // La casilla «Cerrado» manda sobre las horas: un checkbox sin marcar no se
+  // envía, así que su ausencia es lo que abre el día. Y si el día queda abierto
+  // pero le falta una de las dos horas, se cierra igual — ante la duda, cerrado.
+  for (const [dayNumStr, day] of Object.entries(days)) {
+    const isClosed = formData.get(`${dayNumStr}_closed`) !== null;
+    if (isClosed || !day.opensAt || !day.closesAt) {
+      day.opensAt = null;
+      day.closesAt = null;
     }
   }
 

@@ -987,6 +987,49 @@ contenedor (red privada, sin port-forward). Se paga latencia y una corrida cada
   del health, con `.next.prev` ya creado). Probarla exige tirar el sitio a
   propósito unos minutos.
 
+## Los horarios del admin no se podían cambiar (2026-08-08)
+
+**Problema del operador.** El lunes está cerrado y no hay forma de abrirlo; un
+día abierto no se puede cerrar. El form de Horarios guarda sin error y no pasa
+nada.
+
+**Causa.** `admin/page.tsx` renderizaba los `input[type=time]` solo cuando
+`!day.isClosed`. Un día cerrado era texto plano: sin input no hay entrada en
+`formData`, y la action lo dejaba en `null`, es decir cerrado otra vez. En el
+otro sentido tampoco había salida: los dos inputs eran `required`, así que no
+se podía vaciar un día para cerrarlo. No existía ningún control de "cerrado" en
+ninguna de las dos direcciones — solo se podían mover las horas de los días que
+ya estaban abiertos.
+
+Segundo bug, latente: `String(value || null)` con un input vacío daba la
+**cadena** `'null'`, no `null`, y reventaba el regex `HH:mm` de zod con un
+`ZodError` sin capturar.
+
+**Arreglo.** Los inputs se renderizan siempre, para los 7 días, más una casilla
+`${dayOfWeek}_closed` por fila. La casilla es lo único que decide el estado: un
+checkbox sin marcar no se envía, así que su ausencia es lo que abre el día. La
+action pasa a leerla y, fail closed, cierra igual cualquier día abierto al que
+le falte una de las dos horas. `String(value || null)` pasa a
+`value ? String(value) : null`.
+
+Un día cerrado se guarda como 00:00–00:00, así que el form parte de
+`FALLBACK_HOURS` (12:00–23:00) cuando `isClosed`: destildar la casilla y guardar
+sin tocar nada abría el día con una ventana de cero minutos.
+
+**Tradeoff.** La fila creció: dos inputs de hora + casilla. A 360px la casilla
+cae a una segunda línea (`flex-wrap`), unos 44px más de alto por día, ~300px de
+scroll en la sección. Se aceptó porque la alternativa —un `Switch` de Radix por
+fila— convertía la primera parte de `/admin` en client component por 7 casillas
+que un `input[type=checkbox]` nativo resuelve con cero JS.
+
+**Sin verificar.** tsc, lint y los tests de `schedule` pasan, pero el guardado no
+se ejerció en browser: la action no tiene test y no se abrió el panel. Falta
+tildar y destildar un día contra la DB real.
+
+**Fuera de alcance, anotado.** `getOpenState()` sigue ignorando `business_hours`
+(decisión del 2026-08-04, más arriba). Estos horarios son vitrina: cambiarlos no
+abre ni cierra la tienda, eso lo sigue haciendo `acceptingOrders`.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros

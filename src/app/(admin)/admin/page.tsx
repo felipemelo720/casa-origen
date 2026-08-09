@@ -24,6 +24,13 @@ import { cn } from '@/lib/utils';
 export const metadata = { title: 'Admin — Casa Origen' };
 export const dynamic = 'force-dynamic';
 
+/**
+ * Un día cerrado se guarda como 00:00–00:00. Mostrar eso al destildar «Cerrado»
+ * dejaría abrir el día con una ventana de cero minutos, así que el form parte de
+ * un horario usable y el operador solo lo corrige si hace falta.
+ */
+const FALLBACK_HOURS = { opensAt: '12:00', closesAt: '23:00' } as const;
+
 export default async function AdminPage() {
   const isAuthenticated = await isAdminAuthenticated();
 
@@ -162,32 +169,43 @@ export default async function AdminPage() {
             </p>
           </div>
           <form action={updateBusinessHoursAction} className="space-y-2">
+            {/*
+              Los inputs se renderizan siempre, también en un día cerrado: un día
+              sin input no aparece en `formData` y no había forma de abrirlo. La
+              casilla «Cerrado» es lo único que decide, y el server la respeta
+              aunque las horas vengan cargadas.
+            */}
             {weeklySchedule.map((day) => (
               <div key={day.dayOfWeek} className="grid grid-cols-[4.5rem_1fr] items-center gap-3">
                 <span className="text-muted-foreground text-sm font-medium">{day.label}</span>
-                {day.isClosed ? (
-                  <span className="text-muted-foreground text-sm">Cerrado</span>
-                ) : (
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Input
-                      type="time"
-                      name={`${day.dayOfWeek}_opensAt`}
-                      defaultValue={day.opensAt}
-                      aria-label={`${day.label}: hora de apertura`}
-                      className="h-11 min-w-0 flex-1"
-                      required
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <Input
+                    type="time"
+                    name={`${day.dayOfWeek}_opensAt`}
+                    defaultValue={day.isClosed ? FALLBACK_HOURS.opensAt : day.opensAt}
+                    aria-label={`${day.label}: hora de apertura`}
+                    className="h-11 min-w-0 flex-1"
+                  />
+                  <span className="text-muted-foreground shrink-0" aria-hidden="true">
+                    –
+                  </span>
+                  <Input
+                    type="time"
+                    name={`${day.dayOfWeek}_closesAt`}
+                    defaultValue={day.isClosed ? FALLBACK_HOURS.closesAt : day.closesAt}
+                    aria-label={`${day.label}: hora de cierre`}
+                    className="h-11 min-w-0 flex-1"
+                  />
+                  <label className="text-muted-foreground flex h-11 shrink-0 cursor-pointer items-center gap-1.5 px-1 text-sm">
+                    <input
+                      type="checkbox"
+                      name={`${day.dayOfWeek}_closed`}
+                      defaultChecked={day.isClosed}
+                      className="accent-primary focus-visible:ring-ring/50 size-4 rounded-[4px] focus-visible:ring-[3px] focus-visible:outline-none"
                     />
-                    <span className="text-muted-foreground shrink-0">–</span>
-                    <Input
-                      type="time"
-                      name={`${day.dayOfWeek}_closesAt`}
-                      defaultValue={day.closesAt}
-                      aria-label={`${day.label}: hora de cierre`}
-                      className="h-11 min-w-0 flex-1"
-                      required
-                    />
-                  </div>
-                )}
+                    Cerrado
+                  </label>
+                </div>
               </div>
             ))}
             <Button type="submit" className="h-11 w-full">
