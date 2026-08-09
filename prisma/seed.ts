@@ -26,7 +26,7 @@ async function seedSettings() {
     // on WhatsApp, so nobody calls a number the shop does not have.
     update: {
       logo: '/logo.png',
-      phone: '+56920499873',
+      phone: '+56 9 2049 9873',
       whatsapp: '+56920499873',
       deliveryEtaMinutes: 40,
     },
@@ -38,7 +38,7 @@ async function seedSettings() {
       description:
         'Cocina chilena contemporánea preparada con ingredientes de productores locales.',
       email: 'contacto@casaorigen.cl',
-      phone: '+56920499873',
+      phone: '+56 9 2049 9873',
       whatsapp: '+56920499873',
       address: 'Av. Providencia 1234, Providencia, Santiago',
       instagramUrl: 'https://instagram.com/casaorigen',

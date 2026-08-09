@@ -10,12 +10,16 @@ export function StatCard({
   value: string;
 }) {
   return (
-    <div className="border-border bg-background flex items-center gap-3 rounded-xl border p-3">
+    <div className="border-border bg-background flex items-center gap-3 rounded-xl border p-3 lg:flex-col lg:items-start lg:gap-1.5 lg:p-4">
       <div className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
         <Icon className="size-4" />
       </div>
-      <p className="text-muted-foreground min-w-0 truncate text-sm">{label}</p>
-      <p className="ml-auto shrink-0 text-lg font-bold tabular-nums">{value}</p>
+      <p className="text-muted-foreground min-w-0 truncate text-sm lg:text-[10px] lg:tracking-widest lg:uppercase">
+        {label}
+      </p>
+      <p className="lg:font-display ml-auto shrink-0 text-lg font-bold tabular-nums lg:ml-0 lg:text-2xl">
+        {value}
+      </p>
     </div>
   );
 }

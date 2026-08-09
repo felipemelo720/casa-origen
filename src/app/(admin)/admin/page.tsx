@@ -1,5 +1,6 @@
 import { startOfDay, subDays } from 'date-fns';
-import { DollarSign, Receipt, ShoppingBag, Star } from 'lucide-react';
+import Link from 'next/link';
+import { DollarSign, Receipt, ShoppingBag, Star, Store } from 'lucide-react';
 
 import { isAdminAuthenticated } from '@/lib/auth/admin-session';
 import {
@@ -76,92 +77,110 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <main className="min-h-dvh px-4 py-12">
-      <div className="mx-auto max-w-lg space-y-6">
-        <div className="flex items-center justify-between">
+    <main className="min-h-dvh pb-12">
+      <header className="border-border bg-background/80 sticky top-0 z-20 border-b backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <div>
-            <h1 className="font-display text-3xl font-bold">Admin</h1>
+            <h1 className="font-display text-2xl font-bold">Admin</h1>
             <p className="text-muted-foreground text-xs">Casa Origen</p>
           </div>
-          <form action={logoutAction}>
-            <Button type="submit" variant="outline" size="sm">
-              Salir
+          <div className="flex items-center gap-2">
+            {/* La tienda es a dónde vuelve el operador después de tocar algo:
+                sin esto había que editar la URL a mano para ver el efecto. */}
+            <Button asChild variant="outline" size="sm">
+              <Link href="/">
+                <Store aria-hidden="true" />
+                Ver tienda
+              </Link>
             </Button>
-          </form>
+            <form action={logoutAction}>
+              <Button type="submit" variant="ghost" size="sm">
+                Salir
+              </Button>
+            </form>
+          </div>
         </div>
+      </header>
 
-        {/* Store status */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
-          <div>
-            <p className="text-muted-foreground text-xs tracking-widest uppercase">
-              Estado del negocio
-            </p>
-            <div className="mt-1 flex items-center gap-2">
-              <span
-                className={cn(
-                  'size-2.5 rounded-full',
-                  settings.acceptingOrders ? 'bg-green-500' : 'bg-red-500',
-                )}
-              />
-              <span className="font-display text-xl font-bold">
-                {settings.acceptingOrders ? 'ABIERTO' : 'CERRADO'}
-              </span>
+      {/*
+        Una sola grilla: móvil apila en el orden de siempre (operación, horarios,
+        menú, métricas). Desde `lg` se colocan a mano para que la columna angosta
+        quede con lo que se toca a diario y la ancha con las tablas.
+      */}
+      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-3 lg:items-start lg:py-8">
+        {/* Operations: store status + delivery */}
+        <section className="border-border bg-card divide-border divide-y rounded-2xl border lg:col-start-1 lg:row-start-1">
+          <div className="space-y-4 p-6">
+            <div>
+              <p className="text-muted-foreground text-xs tracking-widest uppercase">
+                Estado del negocio
+              </p>
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className={cn(
+                    'size-2.5 rounded-full',
+                    settings.acceptingOrders ? 'bg-green-500' : 'bg-red-500',
+                  )}
+                />
+                <span className="font-display text-xl font-bold">
+                  {settings.acceptingOrders ? 'ABIERTO' : 'CERRADO'}
+                </span>
+              </div>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Manda sobre los horarios: abierto acá es abierto en la web, aunque sea fuera de
+                horario. Nada cierra solo.
+              </p>
             </div>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Manda sobre los horarios: abierto acá es abierto en la web, aunque sea fuera de
-              horario. Nada cierra solo.
-            </p>
+            <form action={toggleAcceptingOrdersAction.bind(null, !settings.acceptingOrders)}>
+              <Button
+                type="submit"
+                variant="outline"
+                className={cn(
+                  'h-11 w-full',
+                  settings.acceptingOrders
+                    ? 'border-red-500/40 text-red-600'
+                    : 'border-green-500/40 text-green-600',
+                )}
+              >
+                {settings.acceptingOrders ? 'Cerrar negocio' : 'Abrir negocio'}
+              </Button>
+            </form>
           </div>
-          <form action={toggleAcceptingOrdersAction.bind(null, !settings.acceptingOrders)}>
-            <Button
-              type="submit"
-              variant="outline"
-              className={cn(
-                'h-11 w-full',
-                settings.acceptingOrders
-                  ? 'border-red-500/40 text-red-600'
-                  : 'border-green-500/40 text-green-600',
-              )}
-            >
-              {settings.acceptingOrders ? 'Cerrar negocio' : 'Abrir negocio'}
-            </Button>
-          </form>
-        </section>
 
-        {/* Delivery */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
-          <div>
-            <p className="text-muted-foreground text-xs tracking-widest uppercase">Delivery</p>
-            <div className="mt-1 flex items-center gap-2">
-              <span
-                className={cn(
-                  'size-2.5 rounded-full',
-                  settings.deliveryEnabled ? 'bg-green-500' : 'bg-red-500',
-                )}
-              />
-              <span className="font-display text-xl font-bold">
-                {settings.deliveryEnabled ? 'DISPONIBLE' : 'NO DISPONIBLE'}
-              </span>
+          <div className="space-y-4 p-6">
+            <div>
+              <p className="text-muted-foreground text-xs tracking-widest uppercase">Delivery</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className={cn(
+                    'size-2.5 rounded-full',
+                    settings.deliveryEnabled ? 'bg-green-500' : 'bg-red-500',
+                  )}
+                />
+                <span className="font-display text-xl font-bold">
+                  {settings.deliveryEnabled ? 'DISPONIBLE' : 'NO DISPONIBLE'}
+                </span>
+              </div>
             </div>
+            <form action={toggleDeliveryAction.bind(null, !settings.deliveryEnabled)}>
+              <Button
+                type="submit"
+                variant="outline"
+                className={cn(
+                  'h-11 w-full',
+                  settings.deliveryEnabled
+                    ? 'border-red-500/40 text-red-600'
+                    : 'border-green-500/40 text-green-600',
+                )}
+              >
+                {settings.deliveryEnabled ? 'Desactivar delivery' : 'Activar delivery'}
+              </Button>
+            </form>
           </div>
-          <form action={toggleDeliveryAction.bind(null, !settings.deliveryEnabled)}>
-            <Button
-              type="submit"
-              variant="outline"
-              className={cn(
-                'h-11 w-full',
-                settings.deliveryEnabled
-                  ? 'border-red-500/40 text-red-600'
-                  : 'border-green-500/40 text-green-600',
-              )}
-            >
-              {settings.deliveryEnabled ? 'Desactivar delivery' : 'Activar delivery'}
-            </Button>
-          </form>
         </section>
 
         {/* Business hours */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-span-2 lg:col-start-2 lg:row-start-1">
           <div>
             <p className="text-muted-foreground text-xs tracking-widest uppercase">Horarios</p>
             <p className="text-muted-foreground mt-1 text-xs">
@@ -170,13 +189,31 @@ export default async function AdminPage() {
           </div>
           <form action={updateBusinessHoursAction} className="space-y-2">
             {/*
+              Cabecera solo desde `lg`: en móvil los inputs se envuelven y los
+              rótulos dejarían de caer sobre su columna.
+            */}
+            <div className="text-muted-foreground/70 hidden grid-cols-[4.5rem_1fr] items-center gap-3 text-[10px] tracking-widest uppercase lg:grid">
+              <span>Día</span>
+              <div className="flex min-w-0 items-center gap-x-2">
+                <span className="min-w-0 flex-1">Desde</span>
+                <span className="shrink-0 opacity-0" aria-hidden="true">
+                  –
+                </span>
+                <span className="min-w-0 flex-1">Hasta</span>
+                <span className="w-[6.5rem] shrink-0 px-1">Cerrado</span>
+              </div>
+            </div>
+            {/*
               Los inputs se renderizan siempre, también en un día cerrado: un día
               sin input no aparece en `formData` y no había forma de abrirlo. La
               casilla «Cerrado» es lo único que decide, y el server la respeta
               aunque las horas vengan cargadas.
             */}
             {weeklySchedule.map((day) => (
-              <div key={day.dayOfWeek} className="grid grid-cols-[4.5rem_1fr] items-center gap-3">
+              <div
+                key={day.dayOfWeek}
+                className="border-border/60 grid grid-cols-[4.5rem_1fr] items-center gap-3 lg:border-t lg:pt-2"
+              >
                 <span className="text-muted-foreground text-sm font-medium">{day.label}</span>
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <Input
@@ -196,7 +233,7 @@ export default async function AdminPage() {
                     aria-label={`${day.label}: hora de cierre`}
                     className="h-11 min-w-0 flex-1"
                   />
-                  <label className="text-muted-foreground flex h-11 shrink-0 cursor-pointer items-center gap-1.5 px-1 text-sm">
+                  <label className="text-muted-foreground flex h-11 shrink-0 cursor-pointer items-center gap-1.5 px-1 text-sm lg:w-[6.5rem]">
                     <input
                       type="checkbox"
                       name={`${day.dayOfWeek}_closed`}
@@ -215,7 +252,7 @@ export default async function AdminPage() {
         </section>
 
         {/* Menu availability */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-span-2 lg:col-start-2 lg:row-start-2">
           <div className="space-y-1">
             <p className="text-muted-foreground text-xs tracking-widest uppercase">Menú</p>
             <p className="text-muted-foreground text-xs">
@@ -237,13 +274,20 @@ export default async function AdminPage() {
               <p className="text-muted-foreground/70 text-[10px] tracking-widest uppercase">
                 {categoryName}
               </p>
-              <div className="space-y-1.5">
-                {categoryProducts.map((product) => {
+              <div className="border-border divide-border bg-background divide-y overflow-hidden rounded-xl border lg:grid lg:grid-cols-2 lg:divide-y-0">
+                {categoryProducts.map((product, index) => {
                   const isUnavailable = product.availability === 'OUT_OF_STOCK';
                   return (
                     <div
                       key={product.id}
-                      className="bg-background border-border flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
+                      className={cn(
+                        'border-border flex items-center justify-between gap-3 px-3 py-2',
+                        // En dos columnas el `divide-y` del padre no separa filas:
+                        // el borde lo pone cada celda salvo la primera de su columna.
+                        'lg:border-t',
+                        index < 2 && 'lg:border-t-0',
+                        index % 2 === 1 && 'lg:border-l',
+                      )}
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <span
@@ -311,9 +355,9 @@ export default async function AdminPage() {
         </section>
 
         {/* Stats */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6">
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-start-1 lg:row-start-2">
           <p className="text-muted-foreground text-xs tracking-widest uppercase">Últimos 7 días</p>
-          <div className="space-y-2">
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
             <StatCard icon={DollarSign} label="Ventas" value={formatMoney(sales.revenue)} />
             <StatCard icon={ShoppingBag} label="Pedidos" value={String(sales.orderCount)} />
             <StatCard
@@ -322,11 +366,11 @@ export default async function AdminPage() {
               value={formatMoney(sales.averageTicket)}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="divide-border/60 divide-y">
             {dailySeries.map((day) => (
               <div
                 key={day.day.toISOString()}
-                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm"
+                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 py-1.5 text-sm"
               >
                 <span className="text-muted-foreground truncate">
                   {day.day.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric' })}
