@@ -1151,6 +1151,70 @@ dos funciones (`die` / `die_loud`) y no un flag.
 con `sed` y no con `source` — ese archivo tiene valores sin comillas con
 espacios, mismo motivo por el que `DATABASE_URL` se lee así.
 
+## El despacho se cotiza por banda, no por precio fijo (2026-08-10)
+
+**Problema.** El local cobra el despacho por distancia real dentro del sector, no
+por sector. La tarifa que le pasa al cliente es una banda («Paine Centro
+$2.000 – $3.000») y el valor exacto se confirma por WhatsApp con la ubicación.
+El modelo tenía un `deliveryFee Int` fijo, así que la web mostraba una cifra
+inventada y el operador terminaba corrigiéndola a mano en cada pedido. Además
+faltaban tres sectores que sí se reparten (Colonia Kennedy, Carretera empresas,
+Linderos Plaza) y sobraban cinco de Santiago que nunca se sirvieron.
+
+**Modelo.** `Commune` gana `deliveryFeeMin` / `deliveryFeeMax`. `deliveryFee`
+sobrevive como **lo único que entra al total**, y vale siempre el piso de la
+banda. Tres campos donde parecen bastar dos, a propósito: el pipeline de totales
+necesita un entero, no un rango, y dejar que la UI derive «el cobro es el
+mínimo» hubiera puesto una regla de negocio en un componente.
+
+**Por qué el piso y no el techo.** Cobrar el techo infla el total de la mayoría
+de los pedidos; cobrar $0 esconde el costo hasta el último mensaje. Con el piso,
+el número en pantalla nunca queda por encima de lo que el operador confirma
+después. El tradeoff aceptado: el total mostrado es un **mínimo**, no una
+promesa, y por eso el checkout lo dice explícito abajo del Total y el mensaje de
+WhatsApp lo repite. Una banda invisible sería peor que no tenerla.
+
+**Colapso de la banda.** `deliveryFeeMax` se iguala a `deliveryFee` cuando el
+valor deja de ser estimado: retiro en tienda, `freeDeliveryFrom` alcanzado,
+cupón `freeDelivery`, o zona de tarifa plana (Linderos Plaza). Sin eso el
+carrito mostraba «$3.500 – $7.000» arriba de un despacho en $0.
+`Math.max(commune.deliveryFeeMax, deliveryFee)` cubre la zona migrada sin techo:
+una banda no puede terminar debajo de lo que cobra.
+
+**Zonas.** Ocho activas. `viluco` y `huelquen` se **renombraron sin cambiar de
+slug** — son la misma zona ensanchada, y re-sluggear habría jubilado la fila
+original dejando los pedidos viejos apuntando a una zona inactiva. El sector
+rural va con las ocho localidades escritas completas en el `name`, no como
+«otros sectores»: quien no encuentra el nombre de su villa asume que no le
+llega. Cuesta cinco líneas de alto en el `<Select>` a 360px y se paga.
+
+**Dónde se dice ahora**, que antes solo aparecía en el checkout:
+
+| Lugar               | Qué                                        |
+| ------------------- | ------------------------------------------ |
+| Trust bar           | «Desde $2.000 / Despacho en Paine»         |
+| `DeliveryChecker`   | banda del sector + `<details>` con las 8   |
+| `DeliveryChecker`   | botón «Cotizar mi despacho» (wa.me)        |
+| Checkout            | banda + nota bajo el Total, solo si aplica |
+| Mensaje de WhatsApp | «(por confirmar)» + aviso del piso         |
+
+La trust bar perdió el ítem «Paine / Zona de reparto»: solo contestaba «¿me
+llega?», que el checker de abajo ya contesta en detalle, mientras que «¿cuánto
+sale?» no tenía respuesta antes del checkout.
+
+**Admin.** Sección nueva de zonas: banda, minutos extra y activa/inactiva, todo
+en un submit porque las zonas se ajustan unas contra otras. `zoneId` viaja como
+campo oculto repetido — una casilla sin marcar no aparece en el `FormData`, así
+que sin esa lista no había forma de **apagar** una zona. La action reescribe
+`deliveryFee` con el mínimo, para que el panel no pueda dejar a
+`pricing.service` cobrando algo que el operador no vio.
+
+**Verificado.** 147 unitarios + 10 de integración. Overflow horizontal medido
+por CDP en 360/768/1280 × claro/oscuro, en `/` y en `/admin`: cero.
+
+**Falta.** El `areaServed` del JSON-LD sigue sin los sectores — es SEO local
+gratis («pizza Champa», «pizza Viluco») y quedó fuera de este corte.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros

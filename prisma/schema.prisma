@@ -148,8 +148,16 @@ model Commune {
   id           String  @id @default(cuid())
   name         String  @unique
   slug         String  @unique
-  /// Delivery fee in minor currency units.
+  /// Delivery fee actually charged at checkout, in minor currency units.
+  /// Kept as the single amount the totals pipeline adds up: the quoted range
+  /// below is a display device, but an order still needs one number.
   deliveryFee  Int     @default(0)
+  /// Quoted range shown before checkout. The real fee depends on the exact
+  /// address inside the zone, so the storefront advertises a band and the
+  /// operator confirms the final amount over WhatsApp. When min equals max
+  /// the fee is flat and the UI shows a single figure.
+  deliveryFeeMin Int   @default(0)
+  deliveryFeeMax Int   @default(0)
   /// Minimum order subtotal required to deliver here.
   minOrder     Int     @default(0)
   /// Extra minutes added to the estimated delivery time.

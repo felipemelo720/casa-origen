@@ -32,6 +32,15 @@ export function formatMoney(amount: number): string {
   return formatter.format(amount / 10 ** currencyDecimals);
 }
 
+/**
+ * Formats a quoted band ("$2.000 – $3.000"). Collapses to a single figure when
+ * both ends match, so a flat fee never reads as an estimate.
+ */
+export function formatMoneyRange(min: number, max: number): string {
+  if (max <= min) return formatMoney(min);
+  return `${formatMoney(min)} – ${formatMoney(max)}`;
+}
+
 /** Parses user input ("12.990", "$12990") back into minor units. */
 export function parseMoney(input: string): number {
   const digits = input.replace(/[^\d]/g, '');

@@ -1,4 +1,4 @@
-import { formatMoney } from '@/lib/money';
+import { formatMoney, formatMoneyRange } from '@/lib/money';
 
 /**
  * The confirmed order, as the pricing engine priced it. Deliberately not the
@@ -21,6 +21,12 @@ export type WhatsAppOrderInput = {
   subtotal: number;
   discount: number;
   deliveryFee: number;
+  /**
+   * Top of the quoted band. Above `deliveryFee` it means the charged fee is the
+   * low end of an estimate, and the message says so — the operator is the one
+   * who closes that gap when they reply.
+   */
+  deliveryFeeMax: number;
   total: number;
   estimatedMinutes: number;
   items: {
@@ -73,8 +79,18 @@ function buildMessage(order: WhatsAppOrderInput, itemsShown: number): string {
 
   parts.push('', `Subtotal: ${formatMoney(order.subtotal)}`);
   if (order.discount > 0) parts.push(`Descuento: -${formatMoney(order.discount)}`);
-  if (order.orderType === 'DELIVERY') parts.push(`Despacho: ${formatMoney(order.deliveryFee)}`);
-  parts.push(`*Total: ${formatMoney(order.total)}*`);
+  if (order.orderType === 'DELIVERY') {
+    const estimated = order.deliveryFeeMax > order.deliveryFee;
+    parts.push(
+      estimated
+        ? `Despacho: ${formatMoneyRange(order.deliveryFee, order.deliveryFeeMax)} (por confirmar)`
+        : `Despacho: ${formatMoney(order.deliveryFee)}`,
+    );
+    parts.push(`*Total: ${formatMoney(order.total)}*`);
+    if (estimated) parts.push('_Total con el despacho más bajo del sector._');
+  } else {
+    parts.push(`*Total: ${formatMoney(order.total)}*`);
+  }
 
   parts.push(
     '',

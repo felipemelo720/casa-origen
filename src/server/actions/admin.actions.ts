@@ -9,8 +9,10 @@ import {
   isAdminAuthenticated,
 } from '@/lib/auth/admin-session';
 import { ForbiddenError } from '@/lib/errors';
-import { settingsRepository } from '@/server/repositories/operations.repository';
+import { parseMoney } from '@/lib/money';
+import { communeRepository, settingsRepository } from '@/server/repositories/operations.repository';
 import { productRepository } from '@/server/repositories/product.repository';
+import { updateCommunesSchema } from '@/schemas/commune.schema';
 import { businessHoursSchema } from '@/schemas/schedule.schema';
 import { updateBusinessHours } from '@/server/services/schedule.service';
 
@@ -120,6 +122,47 @@ export async function updateBusinessHoursAction(formData: FormData): Promise<voi
   await updateBusinessHours(validated);
 
   // Revalidate
+  revalidatePath('/admin');
+  revalidatePath('/');
+}
+
+/**
+ * Lets the operator retune the delivery bands without a deploy — fuel goes up,
+ * the fees follow the same day. The whole table is submitted at once because
+ * the zones are read against each other: nobody adjusts Champa without looking
+ * at Hospital.
+ */
+export async function updateCommunesAction(formData: FormData): Promise<void> {
+  await assertAdmin();
+
+  // `ids` carries the row set, so a zone whose checkbox is unticked still gets
+  // written as inactive. Reading the keys instead would silently skip it —
+  // an unchecked checkbox is simply absent from the FormData.
+  const ids = formData.getAll('zoneId').map(String);
+
+  const input = ids.map((id) => ({
+    id,
+    deliveryFeeMin: parseMoney(String(formData.get(`${id}_min`) ?? '')),
+    deliveryFeeMax: parseMoney(String(formData.get(`${id}_max`) ?? '')),
+    extraMinutes: Number.parseInt(String(formData.get(`${id}_minutes`) ?? '0'), 10) || 0,
+    isActive: formData.get(`${id}_active`) !== null,
+  }));
+
+  const validated = updateCommunesSchema.parse(input);
+
+  for (const zone of validated) {
+    await communeRepository.update(zone.id, {
+      deliveryFeeMin: zone.deliveryFeeMin,
+      deliveryFeeMax: zone.deliveryFeeMax,
+      // The charged fee is the low end of the band. Kept in sync here so the
+      // panel never leaves `pricing.service` charging a figure the operator
+      // does not see on screen.
+      deliveryFee: zone.deliveryFeeMin,
+      extraMinutes: zone.extraMinutes,
+      isActive: zone.isActive,
+    });
+  }
+
   revalidatePath('/admin');
   revalidatePath('/');
 }

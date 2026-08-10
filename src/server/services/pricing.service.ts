@@ -43,6 +43,15 @@ export type PricedCart = {
   couponDiscount: number;
   couponId: string | null;
   deliveryFee: number;
+  /**
+   * The band the zone is advertised at. `deliveryFee` is what the total
+   * charges — always the low end — while this is what the storefront prints so
+   * the customer is not surprised when the operator confirms the real amount.
+   * Both ends collapse to `deliveryFee` whenever the fee stops being an
+   * estimate: pickup, a waived fee, a free-delivery coupon, a flat zone.
+   */
+  deliveryFeeMin: number;
+  deliveryFeeMax: number;
   total: number;
 };
 
@@ -183,6 +192,10 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
 
   // --- Delivery fee ---------------------------------------------------
   let deliveryFee = 0;
+  // Tracked separately from `deliveryFee` so that zeroing the charge (free
+  // delivery, coupon) also collapses the advertised band. A cart that charges
+  // nothing while still showing "$3.500 – $7.000" reads as a bug.
+  let deliveryFeeMax = 0;
   if (input.orderType === 'DELIVERY') {
     if (!input.communeId) throw new BusinessRuleError('Selecciona tu comuna de despacho.');
     const commune = await communeRepository.findById(input.communeId);
@@ -194,8 +207,12 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
       );
     }
     deliveryFee = commune.deliveryFee || settings.defaultDeliveryFee;
+    // Never below what is being charged: a zone left without a top end would
+    // otherwise advertise a band that ends under its own floor.
+    deliveryFeeMax = Math.max(commune.deliveryFeeMax, deliveryFee);
     if (settings.freeDeliveryFrom > 0 && subtotal >= settings.freeDeliveryFrom) {
       deliveryFee = 0;
+      deliveryFeeMax = 0;
     }
   }
 
@@ -230,7 +247,10 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
     couponDiscount = nonNegative(coupon.maxDiscount ? Math.min(raw, coupon.maxDiscount) : raw);
     couponId = coupon.id;
 
-    if (coupon.freeDelivery) deliveryFee = 0;
+    if (coupon.freeDelivery) {
+      deliveryFee = 0;
+      deliveryFeeMax = 0;
+    }
   }
 
   const discount = Math.max(promotionDiscount, couponDiscount);
@@ -246,6 +266,8 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
     couponDiscount: !usingPromotion ? discount : 0,
     couponId: !usingPromotion ? couponId : null,
     deliveryFee,
+    deliveryFeeMin: deliveryFee,
+    deliveryFeeMax,
     total,
   };
 }

@@ -48,6 +48,11 @@ export const previewCartTotalsAction = publicAction(
       subtotal: priced.subtotal,
       discount: priced.promotionDiscount + priced.couponDiscount,
       deliveryFee: priced.deliveryFee,
+      // The band travels with the charge so the totals block can say the fee is
+      // an estimate. Without it the checkout would print one exact figure for
+      // something the operator still has to confirm.
+      deliveryFeeMin: priced.deliveryFeeMin,
+      deliveryFeeMax: priced.deliveryFeeMax,
       total: priced.total,
       items: priced.items.map((item) => ({
         cartItemId: item.cartItemId,

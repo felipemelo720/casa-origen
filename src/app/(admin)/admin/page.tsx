@@ -11,8 +11,9 @@ import {
   setProductAvailabilityAction,
   setProductFeaturedAction,
   updateBusinessHoursAction,
+  updateCommunesAction,
 } from '@/server/actions/admin.actions';
-import { settingsRepository } from '@/server/repositories/operations.repository';
+import { communeRepository, settingsRepository } from '@/server/repositories/operations.repository';
 import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
 import { analyticsRepository } from '@/server/repositories/analytics.repository';
 import { getWeeklySchedule } from '@/server/services/schedule.service';
@@ -52,10 +53,13 @@ export default async function AdminPage() {
     );
   }
 
-  const [settings, products, weeklySchedule] = await Promise.all([
+  const [settings, products, weeklySchedule, zones] = await Promise.all([
     settingsRepository.get(),
     productRepository.findAllForAvailabilityToggle(),
     getWeeklySchedule(),
+    // `findAllForAdmin`, no `findAllActive`: una zona apagada tiene que seguir
+    // visible acá, si no no hay forma de volver a encenderla.
+    communeRepository.findAllForAdmin(),
   ]);
 
   const featuredCount = products.filter((product) => product.isFeatured).length;
@@ -352,6 +356,89 @@ export default async function AdminPage() {
               </div>
             </div>
           ))}
+        </section>
+
+        {/* Delivery zones */}
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-span-2 lg:col-start-2 lg:row-start-3">
+          <div>
+            <p className="text-muted-foreground text-xs tracking-widest uppercase">
+              Zonas de despacho
+            </p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              El cobro es siempre el valor mínimo; el máximo solo se muestra como referencia en la
+              web. Los minutos se suman a los {settings.deliveryEtaMinutes} min base.
+            </p>
+          </div>
+
+          <form action={updateCommunesAction} className="space-y-2">
+            {/* Igual que en horarios: la cabecera solo desde `lg`, porque en
+                móvil los inputs se envuelven y los rótulos dejarían de caer
+                sobre su columna. */}
+            <div className="text-muted-foreground/70 hidden grid-cols-[1fr_22rem] items-center gap-3 text-[10px] tracking-widest uppercase lg:grid">
+              <span>Sector</span>
+              <div className="flex min-w-0 items-center gap-x-2">
+                <span className="min-w-0 flex-1">Mínimo</span>
+                <span className="shrink-0 opacity-0" aria-hidden="true">
+                  –
+                </span>
+                <span className="min-w-0 flex-1">Máximo</span>
+                <span className="w-16 shrink-0">Min. extra</span>
+                <span className="w-[5.5rem] shrink-0 px-1">Activa</span>
+              </div>
+            </div>
+
+            {zones.map((zone) => (
+              <div
+                key={zone.id}
+                className="border-border/60 grid items-center gap-1 border-t pt-2 lg:grid-cols-[1fr_22rem] lg:gap-3"
+              >
+                {/* `zoneId` viaja aparte: una casilla sin marcar no aparece en
+                    el `FormData`, así que sin esta lista no habría forma de
+                    saber que la zona existe para apagarla. */}
+                <input type="hidden" name="zoneId" value={zone.id} />
+                <span className="text-sm font-medium">{zone.name}</span>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <Input
+                    name={`${zone.id}_min`}
+                    inputMode="numeric"
+                    defaultValue={formatMoney(zone.deliveryFeeMin)}
+                    aria-label={`${zone.name}: despacho mínimo`}
+                    className="h-11 min-w-0 flex-1"
+                  />
+                  <span className="text-muted-foreground shrink-0" aria-hidden="true">
+                    –
+                  </span>
+                  <Input
+                    name={`${zone.id}_max`}
+                    inputMode="numeric"
+                    defaultValue={formatMoney(zone.deliveryFeeMax)}
+                    aria-label={`${zone.name}: despacho máximo`}
+                    className="h-11 min-w-0 flex-1"
+                  />
+                  <Input
+                    name={`${zone.id}_minutes`}
+                    inputMode="numeric"
+                    defaultValue={String(zone.extraMinutes)}
+                    aria-label={`${zone.name}: minutos extra`}
+                    className="h-11 w-16 shrink-0"
+                  />
+                  <label className="text-muted-foreground flex h-11 shrink-0 cursor-pointer items-center gap-1.5 px-1 text-sm lg:w-[5.5rem]">
+                    <input
+                      type="checkbox"
+                      name={`${zone.id}_active`}
+                      defaultChecked={zone.isActive}
+                      className="accent-primary focus-visible:ring-ring/50 size-4 rounded-[4px] focus-visible:ring-[3px] focus-visible:outline-none"
+                    />
+                    Activa
+                  </label>
+                </div>
+              </div>
+            ))}
+
+            <Button type="submit" className="h-11 w-full">
+              Guardar zonas
+            </Button>
+          </form>
         </section>
 
         {/* Stats */}

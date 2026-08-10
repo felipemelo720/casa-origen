@@ -9,6 +9,8 @@ type Props = {
   deliveryEtaMinutes: number;
   pickupEtaMinutes: number;
   minOrderAmount: number;
+  /** Cheapest zone fee, or `null` when no zone is active. */
+  deliveryFeeFrom: number | null;
 };
 
 /**
@@ -21,6 +23,7 @@ export function TrustBar({
   deliveryEtaMinutes,
   pickupEtaMinutes,
   minOrderAmount,
+  deliveryFeeFrom,
 }: Props) {
   const items: {
     icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
@@ -34,11 +37,17 @@ export function TrustBar({
 
   items.push({ icon: Store, value: `${pickupEtaMinutes} min`, label: 'Retiro en tienda' });
 
-  // Replaces the free-delivery threshold, which does not apply here. Coverage
-  // answers the same pre-cart objection ("¿me llega?") without promising a
-  // discount that checkout would not honour.
-  if (deliveryEnabled) {
-    items.push({ icon: MapPin, value: 'Paine', label: 'Zona de reparto' });
+  // Price beats coverage in this slot: "Paine" only answered "¿me llega?",
+  // which the checker below already answers in detail, while "¿cuánto sale el
+  // despacho?" had no answer at all before the checkout. "Desde" is deliberate
+  // — the fee is a band, and stating a flat figure here would contradict the
+  // range the checker shows a screen later.
+  if (deliveryEnabled && deliveryFeeFrom !== null) {
+    items.push({
+      icon: MapPin,
+      value: deliveryFeeFrom === 0 ? 'Gratis' : `Desde ${formatMoney(deliveryFeeFrom)}`,
+      label: 'Despacho en Paine',
+    });
   }
 
   // Dropped entirely when there is no minimum, instead of printing "Sin

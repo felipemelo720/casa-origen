@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, formatMoneyRange } from '@/lib/money';
 import { estimateLineTotal, toCartItemInput, useCartStore } from '@/features/cart/cart-store';
 import { placeOrderAction, previewCartTotalsAction } from '@/server/actions/checkout.actions';
 
@@ -362,22 +362,34 @@ export function CheckoutForm({
         )}
       </section>
 
-      <section className="grid grid-cols-2 gap-2">
+      <section className="space-y-2">
+        <h3 className="font-display text-sm font-semibold">Indicaciones para la cocina</h3>
+        <p className="text-muted-foreground text-xs" id="notes-hint">
+          Cuéntanos si quieres sacar o cambiar algún ingrediente, la masa más tostada, cortada en
+          más porciones, o cualquier detalle de la entrega.
+        </p>
         <Textarea
-          rows={2}
-          placeholder="Observaciones…"
-          aria-label="Observaciones"
-          className="min-h-0 resize-none"
+          rows={4}
+          placeholder="Ej: la Pepperoni sin orégano y bien cocida. Tocar el timbre del depto 402."
+          aria-label="Indicaciones para la cocina"
+          aria-describedby="notes-hint"
+          maxLength={300}
+          className="min-h-24"
           {...form.register('notes')}
         />
-        <div className="flex h-fit gap-2">
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="font-display text-sm font-semibold">Cupón de descuento</h3>
+        <div className="flex gap-2">
           <Input
-            placeholder="Cupón"
+            placeholder="Ingresa tu código"
             aria-label="Código de cupón"
+            className="h-11 flex-1"
             value={couponInput}
             onChange={(e) => setCouponInput(e.target.value)}
           />
-          <Button type="button" variant="outline" onClick={applyCoupon}>
+          <Button type="button" variant="outline" className="h-11 px-6" onClick={applyCoupon}>
             Aplicar
           </Button>
         </div>
@@ -400,7 +412,9 @@ export function CheckoutForm({
           {watchedOrderType === 'DELIVERY' && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Despacho</span>
-              <span>{preview ? formatMoney(preview.deliveryFee) : '—'}</span>
+              <span>
+                {preview ? formatMoneyRange(preview.deliveryFeeMin, preview.deliveryFeeMax) : '—'}
+              </span>
             </div>
           )}
           <Separator />
@@ -408,6 +422,17 @@ export function CheckoutForm({
             <span>Total</span>
             <span>{formatMoney(preview?.total ?? subtotal)}</span>
           </div>
+          {/* The total adds the low end of the band, so it is an estimate
+              whenever the band is one. Saying so here — not after the order is
+              placed — is the difference between a quote and a surprise. */}
+          {watchedOrderType === 'DELIVERY' &&
+            preview &&
+            preview.deliveryFeeMax > preview.deliveryFeeMin && (
+              <p className="text-muted-foreground pt-1 text-xs">
+                El total incluye el despacho más bajo de tu sector. Te confirmamos el valor exacto
+                por WhatsApp según tu dirección.
+              </p>
+            )}
         </div>
       </section>
 

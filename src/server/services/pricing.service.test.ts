@@ -33,6 +33,20 @@ const getSettings = vi.mocked(settingsRepository.get);
 const findCouponByCode = vi.mocked(couponRepository.findByCode);
 const countCustomerRedemptions = vi.mocked(couponRepository.countCustomerRedemptions);
 
+/** Delivery zone quoted at $1.500 – $4.000, charged at the low end. */
+function zone(overrides: Partial<{ deliveryFeeMin: number; deliveryFeeMax: number }> = {}) {
+  const deliveryFeeMin = overrides.deliveryFeeMin ?? 1500;
+  return {
+    id: 'commune-1',
+    name: 'Paine',
+    isActive: true,
+    minOrder: 0,
+    deliveryFee: deliveryFeeMin,
+    deliveryFeeMin,
+    deliveryFeeMax: overrides.deliveryFeeMax ?? 4000,
+  } as never;
+}
+
 /** Pizza with a required size group ($0 / +$2.000) and one extra ($1.500). */
 function baseProduct() {
   return {
@@ -197,13 +211,7 @@ describe('priceCart — delivery', () => {
 
   it('waives the delivery fee once the subtotal clears freeDeliveryFrom', async () => {
     getSettings.mockResolvedValue({ ...baseSettings(), freeDeliveryFrom: 5000 });
-    findCommuneById.mockResolvedValue({
-      id: 'commune-1',
-      isActive: true,
-      minOrder: 0,
-      deliveryFee: 1500,
-      name: 'Paine',
-    } as never);
+    findCommuneById.mockResolvedValue(zone());
     const result = await priceCart({
       items: [baseItem()],
       orderType: 'DELIVERY',
@@ -211,6 +219,39 @@ describe('priceCart — delivery', () => {
     });
     expect(result.deliveryFee).toBe(0);
     expect(result.total).toBe(8000);
+    // The advertised band collapses with the charge: showing a range next to a
+    // $0 delivery would contradict the total right below it.
+    expect(result.deliveryFeeMax).toBe(0);
+  });
+
+  it('charges the low end of the band and advertises the high end', async () => {
+    findCommuneById.mockResolvedValue(zone());
+    const result = await priceCart({
+      items: [baseItem()],
+      orderType: 'DELIVERY',
+      communeId: 'commune-1',
+    });
+    expect(result.deliveryFee).toBe(1500);
+    expect(result.deliveryFeeMin).toBe(1500);
+    expect(result.deliveryFeeMax).toBe(4000);
+    expect(result.total).toBe(9500);
+  });
+
+  it('never advertises a ceiling below what it charges', async () => {
+    // A zone migrated before the range existed: both ends still sit at 0.
+    findCommuneById.mockResolvedValue(zone({ deliveryFeeMin: 0, deliveryFeeMax: 0 }));
+    const result = await priceCart({
+      items: [baseItem()],
+      orderType: 'DELIVERY',
+      communeId: 'commune-1',
+    });
+    expect(result.deliveryFeeMax).toBe(result.deliveryFee);
+  });
+
+  it('leaves pickup orders with no fee and no band', async () => {
+    const result = await priceCart({ items: [baseItem()], orderType: 'PICKUP' });
+    expect(result.deliveryFee).toBe(0);
+    expect(result.deliveryFeeMax).toBe(0);
   });
 });
 

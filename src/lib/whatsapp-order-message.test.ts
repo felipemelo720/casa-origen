@@ -17,6 +17,7 @@ function order(overrides: Partial<WhatsAppOrderInput> = {}): WhatsAppOrderInput 
     subtotal: 12000,
     discount: 0,
     deliveryFee: 0,
+    deliveryFeeMax: 0,
     total: 12000,
     estimatedMinutes: 30,
     items: [
@@ -80,6 +81,32 @@ describe('buildWhatsAppOrderMessage', () => {
     expect(message).toContain('Entrega: Delivery — Av. Siempre Viva 742, Paine');
     expect(message).toContain('Despacho: $2.500');
     expect(message).toContain('paga con $20.000, vuelto $5.500');
+  });
+
+  it('quotes the band and flags the total when the fee is an estimate', () => {
+    const message = buildWhatsAppOrderMessage(
+      order({
+        orderType: 'DELIVERY',
+        street: 'Av. Siempre Viva 742',
+        communeName: 'Champa',
+        deliveryFee: 3500,
+        deliveryFeeMax: 5000,
+        total: 15500,
+      }),
+    );
+
+    expect(message).toContain('Despacho: $3.500 – $5.000 (por confirmar)');
+    expect(message).toContain('*Total: $15.500*');
+    expect(message).toContain('Total con el despacho más bajo del sector.');
+  });
+
+  it('states one figure when the zone charges a flat fee', () => {
+    const message = buildWhatsAppOrderMessage(
+      order({ orderType: 'DELIVERY', deliveryFee: 6000, deliveryFeeMax: 6000, total: 18000 }),
+    );
+
+    expect(message).toContain('Despacho: $6.000');
+    expect(message).not.toContain('por confirmar');
   });
 
   it('omits the delivery line for a pickup order', () => {

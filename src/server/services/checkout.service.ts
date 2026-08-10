@@ -222,6 +222,7 @@ export async function placeOrder(input: CheckoutInput) {
     subtotal: priced.subtotal,
     discount: priced.promotionDiscount + priced.couponDiscount,
     deliveryFee: priced.deliveryFee,
+    deliveryFeeMax: priced.deliveryFeeMax,
     total: priced.total,
     estimatedMinutes,
     items: priced.items.map((item) => ({

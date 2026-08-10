@@ -9,6 +9,7 @@ import { HowToOrder } from '@/features/storefront/how-to-order';
 import { OpeningHours } from '@/features/storefront/opening-hours';
 import { RestaurantJsonLd } from '@/features/storefront/restaurant-jsonld';
 import { TrustBar } from '@/features/storefront/trust-bar';
+import { buildWhatsAppUrl } from '@/lib/whatsapp-link';
 import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
 import { getOpenState, getWeeklySchedule } from '@/server/services/schedule.service';
 import {
@@ -81,6 +82,11 @@ export default async function HomePage() {
         deliveryEtaMinutes={settings.deliveryEtaMinutes}
         pickupEtaMinutes={settings.pickupEtaMinutes}
         minOrderAmount={settings.minOrderAmount}
+        // Cheapest zone on offer. Computed here because the trust bar renders
+        // above the checker and has no zone list of its own.
+        deliveryFeeFrom={
+          zones.length > 0 ? Math.min(...zones.map((zone) => zone.deliveryFeeMin)) : null
+        }
       />
 
       {highlighted.length > 0 && (
@@ -105,11 +111,21 @@ export default async function HomePage() {
             id: zone.id,
             name: zone.name,
             deliveryFee: zone.deliveryFee,
+            deliveryFeeMin: zone.deliveryFeeMin,
+            deliveryFeeMax: zone.deliveryFeeMax,
             extraMinutes: zone.extraMinutes,
           }))}
           deliveryEnabled={settings.deliveryEnabled}
           baseEtaMinutes={settings.deliveryEtaMinutes}
           pickupEtaMinutes={settings.pickupEtaMinutes}
+          quoteUrl={
+            settings.whatsapp
+              ? buildWhatsAppUrl(
+                  settings.whatsapp,
+                  `Hola ${settings.name}, quiero cotizar el despacho a mi dirección. Les comparto mi ubicación.`,
+                )
+              : null
+          }
         />
       </section>
 

@@ -66,9 +66,9 @@ async function seedPaymentMethods() {
       requiresChange: false,
       isActive: true,
       sortOrder: 1,
-      description: 'No transfieras todavía.',
+      description: 'Importante: no realices la transferencia hasta recibir nuestra confirmación.',
       instructions:
-        'Confirmas el pedido, te escribimos por WhatsApp para revisar que esté todo disponible y ahí te pasamos los datos bancarios. Recién entonces transfieres y nos mandas el comprobante.',
+        'Después de realizar tu pedido, recibirás un mensaje por WhatsApp con el valor del despacho, total final y datos de transferencia.',
     },
     {
       code: PaymentMethodCode.CASH,
@@ -142,25 +142,71 @@ async function seedCommunes() {
   // `minOrder: 0` everywhere: there is no minimum order. It is zeroed in the
   // data instead of hidden in the UI, so `pricing.service` cannot reject a cart
   // over a threshold the storefront never showed.
+  //
+  // The fee is quoted as a band because it really depends on the address inside
+  // the zone. `deliveryFee` is what checkout charges — the low end of the band,
+  // so the total on screen is never higher than what the operator ends up
+  // confirming by WhatsApp. Charging the top instead would overcharge most
+  // orders; charging nothing would hide the cost until the last message.
   const communes = [
-    { slug: 'paine-centro', name: 'Paine Centro', deliveryFee: 1500, minOrder: 0, extraMinutes: 0 },
     {
-      slug: 'viluco',
-      name: 'Viluco (hasta el retén)',
-      deliveryFee: 2200,
-      minOrder: 0,
-      extraMinutes: 8,
+      slug: 'paine-centro',
+      name: 'Paine Centro',
+      deliveryFeeMin: 2000,
+      deliveryFeeMax: 3000,
+      extraMinutes: 0,
     },
+    // Renamed, not re-slugged: this is the same zone, widened past the retén.
+    { slug: 'viluco', name: 'Viluco', deliveryFeeMin: 3000, deliveryFeeMax: 4500, extraMinutes: 8 },
     {
-      slug: 'huelquen',
-      name: 'Huelquén (hasta el retén)',
-      deliveryFee: 2500,
-      minOrder: 0,
+      slug: 'colonia-kennedy',
+      name: 'Colonia Kennedy',
+      deliveryFeeMin: 3000,
+      deliveryFeeMax: 5000,
       extraMinutes: 10,
     },
-    { slug: 'champa', name: 'Champa', deliveryFee: 2500, minOrder: 0, extraMinutes: 10 },
-    { slug: 'hospital', name: 'Hospital', deliveryFee: 2800, minOrder: 0, extraMinutes: 12 },
-  ];
+    {
+      slug: 'champa',
+      name: 'Champa',
+      deliveryFeeMin: 3500,
+      deliveryFeeMax: 5000,
+      extraMinutes: 10,
+    },
+    {
+      slug: 'hospital',
+      name: 'Hospital',
+      deliveryFeeMin: 3500,
+      deliveryFeeMax: 6000,
+      extraMinutes: 12,
+    },
+    {
+      slug: 'carretera-empresas',
+      name: 'Carretera (empresas)',
+      deliveryFeeMin: 3500,
+      deliveryFeeMax: 4500,
+      extraMinutes: 10,
+    },
+    // Reuses the `huelquen` slug: Huelquén Retén is inside this group, so the
+    // zone was widened rather than replaced, and past orders keep pointing at a
+    // row that is still active. Every locality is spelled out instead of being
+    // called "otros sectores" — a customer who cannot find their own name in
+    // the list assumes we do not reach them.
+    {
+      slug: 'huelquen',
+      name: 'Memorial, C. Las Rosas, 24 de Abril, N. Sendero, V. Hermoso, C. Santa María, C. La Masía, Huelquén Retén',
+      deliveryFeeMin: 3500,
+      deliveryFeeMax: 7000,
+      extraMinutes: 15,
+    },
+    // Flat, not a band: min equals max, and the UI prints one figure.
+    {
+      slug: 'linderos-plaza',
+      name: 'Linderos Plaza',
+      deliveryFeeMin: 6000,
+      deliveryFeeMax: 6000,
+      extraMinutes: 15,
+    },
+  ].map((commune) => ({ ...commune, minOrder: 0, deliveryFee: commune.deliveryFeeMin }));
 
   const slugs = communes.map((commune) => commune.slug);
 
@@ -170,6 +216,8 @@ async function seedCommunes() {
       update: {
         name: commune.name,
         deliveryFee: commune.deliveryFee,
+        deliveryFeeMin: commune.deliveryFeeMin,
+        deliveryFeeMax: commune.deliveryFeeMax,
         minOrder: commune.minOrder,
         extraMinutes: commune.extraMinutes,
         sortOrder: index,
