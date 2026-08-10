@@ -3,6 +3,10 @@ node_modules
 .pnp.js
 
 .next
+# Respaldo del build anterior que crea scripts/deploy.sh. Si un deploy muere
+# entre el respaldo y la limpieza final, este directorio queda untracked y
+# todos los deploys siguientes mueren en `working tree is dirty`.
+.next.prev
 out
 build
 dist
