@@ -17,6 +17,7 @@ import { communeRepository, settingsRepository } from '@/server/repositories/ope
 import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
 import { analyticsRepository } from '@/server/repositories/analytics.repository';
 import { getWeeklySchedule } from '@/server/services/schedule.service';
+import { AdminForm, AdminSubmit } from '@/features/admin/admin-form';
 import { StatCard } from '@/features/admin/stat-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,12 +43,12 @@ export default async function AdminPage() {
         <div className="border-border bg-card w-full max-w-sm rounded-2xl border p-8">
           <h1 className="font-display text-3xl font-bold">Admin</h1>
           <p className="text-muted-foreground mb-8 text-sm">Casa Origen — panel de control</p>
-          <form action={loginAction} className="space-y-4">
+          <AdminForm action={loginAction} className="space-y-4">
             <Input name="password" type="password" placeholder="Contraseña" required autoFocus />
-            <Button type="submit" className="w-full">
+            <AdminSubmit className="w-full" pendingLabel="Entrando…">
               Entrar
-            </Button>
-          </form>
+            </AdminSubmit>
+          </AdminForm>
         </div>
       </main>
     );
@@ -135,10 +136,13 @@ export default async function AdminPage() {
                 horario. Nada cierra solo.
               </p>
             </div>
-            <form action={toggleAcceptingOrdersAction.bind(null, !settings.acceptingOrders)}>
-              <Button
-                type="submit"
+            <AdminForm
+              action={toggleAcceptingOrdersAction.bind(null, !settings.acceptingOrders)}
+              className="space-y-2"
+            >
+              <AdminSubmit
                 variant="outline"
+                pendingLabel="Cambiando…"
                 className={cn(
                   'h-11 w-full',
                   settings.acceptingOrders
@@ -147,8 +151,8 @@ export default async function AdminPage() {
                 )}
               >
                 {settings.acceptingOrders ? 'Cerrar negocio' : 'Abrir negocio'}
-              </Button>
-            </form>
+              </AdminSubmit>
+            </AdminForm>
           </div>
 
           <div className="space-y-4 p-6">
@@ -166,10 +170,13 @@ export default async function AdminPage() {
                 </span>
               </div>
             </div>
-            <form action={toggleDeliveryAction.bind(null, !settings.deliveryEnabled)}>
-              <Button
-                type="submit"
+            <AdminForm
+              action={toggleDeliveryAction.bind(null, !settings.deliveryEnabled)}
+              className="space-y-2"
+            >
+              <AdminSubmit
                 variant="outline"
+                pendingLabel="Cambiando…"
                 className={cn(
                   'h-11 w-full',
                   settings.deliveryEnabled
@@ -178,8 +185,8 @@ export default async function AdminPage() {
                 )}
               >
                 {settings.deliveryEnabled ? 'Desactivar delivery' : 'Activar delivery'}
-              </Button>
-            </form>
+              </AdminSubmit>
+            </AdminForm>
           </div>
         </section>
 
@@ -191,7 +198,7 @@ export default async function AdminPage() {
               Estos son los horarios que se muestran en la web.
             </p>
           </div>
-          <form action={updateBusinessHoursAction} className="space-y-2">
+          <AdminForm action={updateBusinessHoursAction} className="space-y-2">
             {/*
               Cabecera solo desde `lg`: en móvil los inputs se envuelven y los
               rótulos dejarían de caer sobre su columna.
@@ -249,10 +256,8 @@ export default async function AdminPage() {
                 </div>
               </div>
             ))}
-            <Button type="submit" className="h-11 w-full">
-              Guardar horarios
-            </Button>
-          </form>
+            <AdminSubmit className="h-11 w-full">Guardar horarios</AdminSubmit>
+          </AdminForm>
         </section>
 
         {/* Menu availability */}
@@ -304,17 +309,21 @@ export default async function AdminPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {/* Separate forms: nesting one inside the other is invalid HTML. */}
-                        <form
+                        {/* `toast`, no línea inline: son botones de ícono dentro
+                            de una fila angosta y un párrafo extra la
+                            descuadraría entera. */}
+                        <AdminForm
+                          feedback="toast"
                           action={setProductFeaturedAction.bind(
                             null,
                             product.id,
                             !product.isFeatured,
                           )}
                         >
-                          <Button
-                            type="submit"
+                          <AdminSubmit
                             size="icon"
                             variant="outline"
+                            pendingLabel=""
                             title={
                               product.isFeatured ? 'Quitar de destacados' : 'Destacar en la portada'
                             }
@@ -327,18 +336,19 @@ export default async function AdminPage() {
                             )}
                           >
                             <Star className={cn('size-4', product.isFeatured && 'fill-current')} />
-                          </Button>
-                        </form>
-                        <form
+                          </AdminSubmit>
+                        </AdminForm>
+                        <AdminForm
+                          feedback="toast"
                           action={setProductAvailabilityAction.bind(
                             null,
                             product.id,
                             isUnavailable,
                           )}
                         >
-                          <Button
-                            type="submit"
+                          <AdminSubmit
                             variant="outline"
+                            pendingLabel="…"
                             className={cn(
                               'h-11 px-3',
                               isUnavailable
@@ -347,8 +357,8 @@ export default async function AdminPage() {
                             )}
                           >
                             {isUnavailable ? 'Activar' : 'Agotar'}
-                          </Button>
-                        </form>
+                          </AdminSubmit>
+                        </AdminForm>
                       </div>
                     </div>
                   );
@@ -370,7 +380,7 @@ export default async function AdminPage() {
             </p>
           </div>
 
-          <form action={updateCommunesAction} className="space-y-2">
+          <AdminForm action={updateCommunesAction} className="space-y-2">
             {/* Igual que en horarios: la cabecera solo desde `lg`, porque en
                 móvil los inputs se envuelven y los rótulos dejarían de caer
                 sobre su columna. */}
@@ -435,10 +445,8 @@ export default async function AdminPage() {
               </div>
             ))}
 
-            <Button type="submit" className="h-11 w-full">
-              Guardar zonas
-            </Button>
-          </form>
+            <AdminSubmit className="h-11 w-full">Guardar zonas</AdminSubmit>
+          </AdminForm>
         </section>
 
         {/* Stats */}

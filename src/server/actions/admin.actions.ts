@@ -8,24 +8,46 @@ import {
   verifyAdminPassword,
   isAdminAuthenticated,
 } from '@/lib/auth/admin-session';
-import { ForbiddenError } from '@/lib/errors';
+import { ErrorCode, ForbiddenError } from '@/lib/errors';
 import { parseMoney } from '@/lib/money';
+import { fail, failFrom, ok, type ActionResult } from '@/lib/result';
 import { communeRepository, settingsRepository } from '@/server/repositories/operations.repository';
 import { productRepository } from '@/server/repositories/product.repository';
 import { updateCommunesSchema } from '@/schemas/commune.schema';
 import { businessHoursSchema } from '@/schemas/schedule.schema';
 import { updateBusinessHours } from '@/server/services/schedule.service';
 
+/**
+ * Todas las acciones del panel devuelven `ActionResult<string>`, donde el dato
+ * es el texto que se le muestra al operador.
+ *
+ * Antes devolvían `void` y lanzaban: un zod inválido subía al error boundary de
+ * Next y un guardado correcto no se distinguía de uno que no llegó a pasar. En
+ * un local abierto eso se paga apretando «Guardar» de nuevo, sin saber si el
+ * primero entró. El error se modela como dato porque una Server Action sólo
+ * puede devolver valores serializables.
+ *
+ * La firma `(state, formData)` es la que pide `useActionState`; las acciones con
+ * argumento propio lo reciben antes y se atan con `.bind()`.
+ */
+type AdminResult = ActionResult<string>;
+
 async function assertAdmin(): Promise<void> {
   if (!(await isAdminAuthenticated())) throw new ForbiddenError();
 }
 
-export async function loginAction(formData: FormData): Promise<void> {
+export async function loginAction(_state: AdminResult | null, formData: FormData) {
   const password = String(formData.get('password') ?? '');
-  if (verifyAdminPassword(password)) {
-    await createAdminSession();
-    revalidatePath('/admin');
+
+  // Una contraseña equivocada volvía a pintar el mismo formulario vacío, sin
+  // decir nada: era indistinguible de un error de red.
+  if (!verifyAdminPassword(password)) {
+    return fail('Contraseña incorrecta.', ErrorCode.UNAUTHENTICATED);
   }
+
+  await createAdminSession();
+  revalidatePath('/admin');
+  return ok('Sesión iniciada.');
 }
 
 export async function logoutAction(): Promise<void> {
@@ -33,97 +55,132 @@ export async function logoutAction(): Promise<void> {
   revalidatePath('/admin');
 }
 
-export async function toggleAcceptingOrdersAction(acceptingOrders: boolean): Promise<void> {
-  await assertAdmin();
-  await settingsRepository.update({ acceptingOrders });
-  revalidatePath('/admin');
-  revalidatePath('/');
+export async function toggleAcceptingOrdersAction(
+  acceptingOrders: boolean,
+  _state: AdminResult | null,
+  _formData: FormData,
+) {
+  try {
+    await assertAdmin();
+    await settingsRepository.update({ acceptingOrders });
+    revalidatePath('/admin');
+    revalidatePath('/');
+    return ok(acceptingOrders ? 'Negocio abierto.' : 'Negocio cerrado.');
+  } catch (error) {
+    return failFrom(error);
+  }
 }
 
-export async function toggleDeliveryAction(deliveryEnabled: boolean): Promise<void> {
-  await assertAdmin();
-  await settingsRepository.update({ deliveryEnabled });
-  revalidatePath('/admin');
-  revalidatePath('/');
+export async function toggleDeliveryAction(
+  deliveryEnabled: boolean,
+  _state: AdminResult | null,
+  _formData: FormData,
+) {
+  try {
+    await assertAdmin();
+    await settingsRepository.update({ deliveryEnabled });
+    revalidatePath('/admin');
+    revalidatePath('/');
+    return ok(deliveryEnabled ? 'Delivery activado.' : 'Delivery desactivado.');
+  } catch (error) {
+    return failFrom(error);
+  }
 }
 
 export async function setProductAvailabilityAction(
   productId: string,
   available: boolean,
-): Promise<void> {
-  await assertAdmin();
-  await productRepository.setAvailability(productId, available ? 'AVAILABLE' : 'OUT_OF_STOCK');
-  revalidatePath('/admin');
-  revalidatePath('/');
+  _state: AdminResult | null,
+  _formData: FormData,
+) {
+  try {
+    await assertAdmin();
+    await productRepository.setAvailability(productId, available ? 'AVAILABLE' : 'OUT_OF_STOCK');
+    revalidatePath('/admin');
+    revalidatePath('/');
+    return ok(available ? 'Producto disponible.' : 'Producto agotado.');
+  } catch (error) {
+    return failFrom(error);
+  }
 }
 
 export async function setProductFeaturedAction(
   productId: string,
   isFeatured: boolean,
-): Promise<void> {
-  await assertAdmin();
-  await productRepository.setFeatured(productId, isFeatured);
-  revalidatePath('/admin');
-  revalidatePath('/');
+  _state: AdminResult | null,
+  _formData: FormData,
+) {
+  try {
+    await assertAdmin();
+    await productRepository.setFeatured(productId, isFeatured);
+    revalidatePath('/admin');
+    revalidatePath('/');
+    return ok(isFeatured ? 'Destacado en la portada.' : 'Quitado de destacados.');
+  } catch (error) {
+    return failFrom(error);
+  }
 }
 
-export async function updateBusinessHoursAction(formData: FormData): Promise<void> {
-  await assertAdmin();
+export async function updateBusinessHoursAction(_state: AdminResult | null, formData: FormData) {
+  try {
+    await assertAdmin();
 
-  const dayOfWeekMap = [
-    'SUNDAY',
-    'MONDAY',
-    'TUESDAY',
-    'WEDNESDAY',
-    'THURSDAY',
-    'FRIDAY',
-    'SATURDAY',
-  ] as const;
+    const dayOfWeekMap = [
+      'SUNDAY',
+      'MONDAY',
+      'TUESDAY',
+      'WEDNESDAY',
+      'THURSDAY',
+      'FRIDAY',
+      'SATURDAY',
+    ] as const;
 
-  // Arrancar con los 7 días en null y llenarlos desde el form: el array
-  // siempre tiene largo 7, que es lo que exige `businessHoursSchema.length(7)`.
-  const days: Record<
-    number,
-    { dayOfWeek: (typeof dayOfWeekMap)[number]; opensAt: string | null; closesAt: string | null }
-  > = {};
-  dayOfWeekMap.forEach((dayOfWeek, dayNum) => {
-    days[dayNum] = { dayOfWeek, opensAt: null, closesAt: null };
-  });
+    // Arrancar con los 7 días en null y llenarlos desde el form: el array
+    // siempre tiene largo 7, que es lo que exige `businessHoursSchema.length(7)`.
+    const days: Record<
+      number,
+      { dayOfWeek: (typeof dayOfWeekMap)[number]; opensAt: string | null; closesAt: string | null }
+    > = {};
+    dayOfWeekMap.forEach((dayOfWeek, dayNum) => {
+      days[dayNum] = { dayOfWeek, opensAt: null, closesAt: null };
+    });
 
-  for (const [key, value] of formData.entries()) {
-    const match = key.match(/^(\d+)_(opensAt|closesAt)$/);
-    if (match && match[1] && match[2]) {
-      const dayNum = Number(match[1]);
-      const field = match[2];
-      const day = days[dayNum];
-      // Un input vacío es `''`: `String(value || null)` daba la *cadena*
-      // `'null'` y reventaba el regex de zod. Vacío significa sin hora.
-      if (day) day[field as 'opensAt' | 'closesAt'] = value ? String(value) : null;
+    for (const [key, value] of formData.entries()) {
+      const match = key.match(/^(\d+)_(opensAt|closesAt)$/);
+      if (match && match[1] && match[2]) {
+        const dayNum = Number(match[1]);
+        const field = match[2];
+        const day = days[dayNum];
+        // Un input vacío es `''`: `String(value || null)` daba la *cadena*
+        // `'null'` y reventaba el regex de zod. Vacío significa sin hora.
+        if (day) day[field as 'opensAt' | 'closesAt'] = value ? String(value) : null;
+      }
     }
-  }
 
-  // La casilla «Cerrado» manda sobre las horas: un checkbox sin marcar no se
-  // envía, así que su ausencia es lo que abre el día. Y si el día queda abierto
-  // pero le falta una de las dos horas, se cierra igual — ante la duda, cerrado.
-  for (const [dayNumStr, day] of Object.entries(days)) {
-    const isClosed = formData.get(`${dayNumStr}_closed`) !== null;
-    if (isClosed || !day.opensAt || !day.closesAt) {
-      day.opensAt = null;
-      day.closesAt = null;
+    // La casilla «Cerrado» manda sobre las horas: un checkbox sin marcar no se
+    // envía, así que su ausencia es lo que abre el día. Y si el día queda abierto
+    // pero le falta una de las dos horas, se cierra igual — ante la duda, cerrado.
+    for (const [dayNumStr, day] of Object.entries(days)) {
+      const isClosed = formData.get(`${dayNumStr}_closed`) !== null;
+      if (isClosed || !day.opensAt || !day.closesAt) {
+        day.opensAt = null;
+        day.closesAt = null;
+      }
     }
+
+    const parsed = businessHoursSchema.safeParse(Object.values(days));
+    if (!parsed.success) {
+      return fail('No se pudieron guardar los horarios: revisa las horas.', ErrorCode.VALIDATION);
+    }
+
+    await updateBusinessHours(parsed.data);
+
+    revalidatePath('/admin');
+    revalidatePath('/');
+    return ok('Horarios guardados.');
+  } catch (error) {
+    return failFrom(error);
   }
-
-  const input = Object.values(days);
-
-  // Validate
-  const validated = businessHoursSchema.parse(input);
-
-  // Update
-  await updateBusinessHours(validated);
-
-  // Revalidate
-  revalidatePath('/admin');
-  revalidatePath('/');
 }
 
 /**
@@ -132,37 +189,49 @@ export async function updateBusinessHoursAction(formData: FormData): Promise<voi
  * the zones are read against each other: nobody adjusts Champa without looking
  * at Hospital.
  */
-export async function updateCommunesAction(formData: FormData): Promise<void> {
-  await assertAdmin();
+export async function updateCommunesAction(_state: AdminResult | null, formData: FormData) {
+  try {
+    await assertAdmin();
 
-  // `ids` carries the row set, so a zone whose checkbox is unticked still gets
-  // written as inactive. Reading the keys instead would silently skip it —
-  // an unchecked checkbox is simply absent from the FormData.
-  const ids = formData.getAll('zoneId').map(String);
+    // `ids` carries the row set, so a zone whose checkbox is unticked still gets
+    // written as inactive. Reading the keys instead would silently skip it —
+    // an unchecked checkbox is simply absent from the FormData.
+    const ids = formData.getAll('zoneId').map(String);
 
-  const input = ids.map((id) => ({
-    id,
-    deliveryFeeMin: parseMoney(String(formData.get(`${id}_min`) ?? '')),
-    deliveryFeeMax: parseMoney(String(formData.get(`${id}_max`) ?? '')),
-    extraMinutes: Number.parseInt(String(formData.get(`${id}_minutes`) ?? '0'), 10) || 0,
-    isActive: formData.get(`${id}_active`) !== null,
-  }));
+    const input = ids.map((id) => ({
+      id,
+      deliveryFeeMin: parseMoney(String(formData.get(`${id}_min`) ?? '')),
+      deliveryFeeMax: parseMoney(String(formData.get(`${id}_max`) ?? '')),
+      extraMinutes: Number.parseInt(String(formData.get(`${id}_minutes`) ?? '0'), 10) || 0,
+      isActive: formData.get(`${id}_active`) !== null,
+    }));
 
-  const validated = updateCommunesSchema.parse(input);
+    const parsed = updateCommunesSchema.safeParse(input);
+    if (!parsed.success) {
+      return fail(
+        'No se pudieron guardar las zonas: el mínimo no puede ser mayor que el máximo.',
+        ErrorCode.VALIDATION,
+      );
+    }
 
-  for (const zone of validated) {
-    await communeRepository.update(zone.id, {
-      deliveryFeeMin: zone.deliveryFeeMin,
-      deliveryFeeMax: zone.deliveryFeeMax,
-      // The charged fee is the low end of the band. Kept in sync here so the
-      // panel never leaves `pricing.service` charging a figure the operator
-      // does not see on screen.
-      deliveryFee: zone.deliveryFeeMin,
-      extraMinutes: zone.extraMinutes,
-      isActive: zone.isActive,
-    });
+    for (const zone of parsed.data) {
+      await communeRepository.update(zone.id, {
+        deliveryFeeMin: zone.deliveryFeeMin,
+        deliveryFeeMax: zone.deliveryFeeMax,
+        // The charged fee is the low end of the band. Kept in sync here so the
+        // panel never leaves `pricing.service` charging a figure the operator
+        // does not see on screen.
+        deliveryFee: zone.deliveryFeeMin,
+        extraMinutes: zone.extraMinutes,
+        isActive: zone.isActive,
+      });
+    }
+
+    revalidatePath('/admin');
+    revalidatePath('/');
+    const count = parsed.data.length;
+    return ok(`Zonas guardadas (${count}).`);
+  } catch (error) {
+    return failFrom(error);
   }
-
-  revalidatePath('/admin');
-  revalidatePath('/');
 }

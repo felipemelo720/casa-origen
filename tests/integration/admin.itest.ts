@@ -38,17 +38,22 @@ describe('updateBusinessHoursAction (integración)', () => {
     await resetDb();
   });
 
+  // La acción ya no lanza: devuelve el error como dato para que el panel lo
+  // pueda mostrar. Que no escriba nada sigue siendo lo que importa.
   it('rechaza sin la cookie de admin', async () => {
-    await expect(
-      updateBusinessHoursAction(buildHoursForm({ mondayClosed: false })),
-    ).rejects.toThrow();
+    const result = await updateBusinessHoursAction(null, buildHoursForm({ mondayClosed: false }));
+
+    expect(result.ok).toBe(false);
     expect(await prisma.businessHour.count()).toBe(0);
   });
 
   it('abre un día cerrado', async () => {
     await signInAsAdmin();
 
-    await updateBusinessHoursAction(buildHoursForm({ mondayClosed: false }));
+    const result = await updateBusinessHoursAction(null, buildHoursForm({ mondayClosed: false }));
+
+    // El mensaje es lo único que el operador ve al guardar, así que se prueba.
+    expect(result).toEqual({ ok: true, data: 'Horarios guardados.' });
 
     const monday = await prisma.businessHour.findUniqueOrThrow({ where: { dayOfWeek: MONDAY } });
     expect(monday.isClosed).toBe(false);
@@ -60,8 +65,8 @@ describe('updateBusinessHoursAction (integración)', () => {
   it('cierra un día abierto', async () => {
     await signInAsAdmin();
 
-    await updateBusinessHoursAction(buildHoursForm({ mondayClosed: false }));
-    await updateBusinessHoursAction(buildHoursForm({ mondayClosed: true }));
+    await updateBusinessHoursAction(null, buildHoursForm({ mondayClosed: false }));
+    await updateBusinessHoursAction(null, buildHoursForm({ mondayClosed: true }));
 
     const monday = await prisma.businessHour.findUniqueOrThrow({ where: { dayOfWeek: MONDAY } });
     expect(monday.isClosed).toBe(true);

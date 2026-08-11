@@ -48,15 +48,17 @@ describe('updateCommunesAction (integración)', () => {
     });
   });
 
+  // Las acciones del panel ya no lanzan: devuelven el error como dato para que
+  // la UI lo pueda mostrar. Lo que no cambia es que no escriban nada.
   it('rechaza sin la cookie de admin', async () => {
     const zone = await zoneBySlug('paine-centro');
 
-    await expect(
-      updateCommunesAction(
-        buildZoneForm([{ id: zone.id, min: '$9.000', max: '$9.000', minutes: '0', active: true }]),
-      ),
-    ).rejects.toThrow();
+    const result = await updateCommunesAction(
+      null,
+      buildZoneForm([{ id: zone.id, min: '$9.000', max: '$9.000', minutes: '0', active: true }]),
+    );
 
+    expect(result.ok).toBe(false);
     expect((await zoneBySlug('paine-centro')).deliveryFeeMin).toBe(2000);
   });
 
@@ -64,9 +66,13 @@ describe('updateCommunesAction (integración)', () => {
     await signInAsAdmin();
     const zone = await zoneBySlug('paine-centro');
 
-    await updateCommunesAction(
+    const result = await updateCommunesAction(
+      null,
       buildZoneForm([{ id: zone.id, min: '$2.500', max: '$4.000', minutes: '5', active: true }]),
     );
+
+    // El mensaje que ve el operador es parte del contrato de la acción.
+    expect(result).toEqual({ ok: true, data: 'Zonas guardadas (1).' });
 
     const updated = await zoneBySlug('paine-centro');
     expect(updated.deliveryFeeMin).toBe(2500);
@@ -81,12 +87,12 @@ describe('updateCommunesAction (integración)', () => {
     await signInAsAdmin();
     const zone = await zoneBySlug('paine-centro');
 
-    await expect(
-      updateCommunesAction(
-        buildZoneForm([{ id: zone.id, min: '$5.000', max: '$1.000', minutes: '0', active: true }]),
-      ),
-    ).rejects.toThrow();
+    const result = await updateCommunesAction(
+      null,
+      buildZoneForm([{ id: zone.id, min: '$5.000', max: '$1.000', minutes: '0', active: true }]),
+    );
 
+    expect(result.ok).toBe(false);
     expect((await zoneBySlug('paine-centro')).deliveryFeeMin).toBe(2000);
   });
 
@@ -95,6 +101,7 @@ describe('updateCommunesAction (integración)', () => {
     const zone = await zoneBySlug('paine-centro');
 
     await updateCommunesAction(
+      null,
       buildZoneForm([{ id: zone.id, min: '$2.000', max: '$3.000', minutes: '0', active: false }]),
     );
 
