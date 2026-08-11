@@ -21,6 +21,12 @@ next-env.d.ts
 coverage
 .nyc_output
 
+# Reportes JSON de vitest. Solo los escribe CI (para que el aviso de Telegram
+# pueda nombrar los tests rojos), pero correr el mismo comando a mano los deja
+# acá y ensucia el árbol.
+unit-results.json
+integration-results.json
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

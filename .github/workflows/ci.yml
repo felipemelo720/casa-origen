@@ -40,49 +40,122 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Every check carries an `id`: the failure notification below reads the
+      # step outcomes to name what actually broke. Without them the alert can
+      # only say "CI falló", which costs a round trip to the browser to learn
+      # anything at all.
       - run: npm ci
+        id: install
 
       - run: npx tsc --noEmit
+        id: typecheck
 
       - run: npm run lint
+        id: lint
 
       - run: npm run format:check
+        id: format
 
-      - run: npm run test
+      # The JSON reporter runs alongside the default one — the log stays
+      # readable and the notification gets the counts and the names of the
+      # failing tests. Vitest writes the file even when the run is red, which
+      # is the only case that reads it.
+      - run: npm run test -- --reporter=default --reporter=json --outputFile.json=unit-results.json
+        id: test
 
       # Integration tests own a second database in the same service container.
       # They TRUNCATE between tests, so they must never point at the database
       # `next build` seeds below — hence the `_test` suffix, which
       # `tests/setup/db.ts` refuses to run without.
       - name: Integration tests
+        id: test_int
         env:
           DATABASE_URL: postgresql://casaorigen:casaorigen@localhost:5432/casaorigen_test?schema=public
         run: |
           PGPASSWORD=casaorigen psql -h localhost -U casaorigen -d casaorigen \
             -c 'CREATE DATABASE casaorigen_test'
-          npm run test:int
+          npm run test:int -- --reporter=default --reporter=json --outputFile.json=integration-results.json
 
       # Schema first, then catalogue data: the landing renders products,
       # settings and business hours during the build.
       - name: Prepare database
+        id: migrate
         run: |
           npx prisma migrate deploy
           npx prisma db seed
 
       - run: npm run build
+        id: build
 
       # Telegram beats the failure email: the email lands in a folder nobody
       # opens on a phone. `if: failure()` also covers a job cancelled by a
       # previous step dying, which is the case that matters.
       # No-ops when TG_TOKEN is not set, so a fork does not fail here.
+      #
+      # Nothing is sent when CI passes. The green side is already covered by
+      # the `✅ desplegado` of `scripts/deploy.sh`, and a second message for
+      # the same event is how a channel gets muted.
       - name: Notify Telegram on failure
         if: failure()
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
+          # The job is fail-fast, so exactly one step is `failure` and the rest
+          # are `success` or `skipped`. The fallback covers a job cancelled or
+          # timed out before any step could fail.
+          FAILED_STEP: >-
+            ${{ steps.install.outcome == 'failure' && 'npm ci'
+            || steps.typecheck.outcome == 'failure' && 'tsc --noEmit'
+            || steps.lint.outcome == 'failure' && 'lint'
+            || steps.format.outcome == 'failure' && 'format:check'
+            || steps.test.outcome == 'failure' && 'test'
+            || steps.test_int.outcome == 'failure' && 'test:int'
+            || steps.migrate.outcome == 'failure' && 'migrate/seed'
+            || steps.build.outcome == 'failure' && 'build'
+            || 'un paso desconocido' }}
         run: |
           [ -n "$TG_TOKEN" ] || exit 0
+
+          # Single-quoted on purpose: the script is full of backticks and
+          # `${...}`, and bash expands neither inside single quotes.
+          text=$(node -e '
+            const fs = require("fs");
+            const sha = (process.env.GITHUB_SHA || "").slice(0, 7);
+            const lines = [
+              `❌ Casa Origen — CI falló en ${process.env.FAILED_STEP} (${sha}, ${process.env.GITHUB_REF_NAME}). No se va a desplegar.`,
+            ];
+
+            // The reports only exist if the test step got to run at all. A red
+            // tsc or lint leaves the alert without test detail, which is the
+            // honest answer: there were no tests.
+            const reports = [
+              ["test", "unit-results.json"],
+              ["test:int", "integration-results.json"],
+            ];
+
+            for (const [label, file] of reports) {
+              let report;
+              try {
+                report = JSON.parse(fs.readFileSync(file, "utf8"));
+              } catch {
+                continue;
+              }
+              if (!report.numFailedTests) continue;
+
+              lines.push("", `${label}: ${report.numFailedTests}/${report.numTotalTests} rojos`);
+              const failed = report.testResults
+                .flatMap((suite) => suite.assertionResults)
+                .filter((assertion) => assertion.status === "failed");
+              // Three names fit a phone notification; the rest is a count.
+              for (const assertion of failed.slice(0, 3)) lines.push(`• ${assertion.fullName}`);
+              if (failed.length > 3) lines.push(`• …y ${failed.length - 3} más`);
+            }
+
+            lines.push("", `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`);
+            process.stdout.write(lines.join("\n"));
+          ')
+
           curl --silent --output /dev/null --max-time 10 \
             -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${TG_CHAT}" \
-            --data-urlencode "text=❌ Casa Origen — CI falló en ${GITHUB_REF_NAME} (${GITHUB_SHA:0:7}). No se va a desplegar. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            --data-urlencode "text=${text}"
