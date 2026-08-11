@@ -11,6 +11,10 @@ export type CartVariantSelection = {
    *  add-on without going back to the catalogue. `null` on lines saved before
    *  this existed; the drawer then falls back to the extra's own price. */
   extraPrice?: number | null;
+  /** Same, for an add-on in the premium tier. `undefined` on lines persisted
+   *  before the carta split add-ons in two, which then fall back to
+   *  `extraPrice` — the price those lines were quoted at. */
+  extraPremiumPrice?: number | null;
 };
 export type CartExtraSelection = {
   extraId: string;

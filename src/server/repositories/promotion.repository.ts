@@ -20,6 +20,37 @@ export const promotionRepository = {
       },
     });
   },
+  /**
+   * The bundle the landing advertises above the menu. `findFirst` and not
+   * `findMany`: the home has one builder, so two featured bundles would be a
+   * silent race — the highest priority wins and the rest stay redeemable in
+   * the cart without a card of their own.
+   */
+  async findFeaturedBundle() {
+    const now = new Date();
+    return prisma.promotion.findFirst({
+      where: {
+        isActive: true,
+        isFeatured: true,
+        discountType: 'BUNDLE_PRICE',
+        startsAt: { lte: now },
+        OR: [{ endsAt: null }, { endsAt: { gte: now } }],
+      },
+      orderBy: { priority: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        value: true,
+        scope: true,
+        bundleSize: true,
+        bundleVariantName: true,
+        bundleSizeLabel: true,
+        image: true,
+        products: { select: { productId: true } },
+      },
+    });
+  },
   async findAllForAdmin() {
     return prisma.promotion.findMany({ orderBy: { createdAt: 'desc' } });
   },

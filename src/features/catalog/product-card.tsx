@@ -7,6 +7,7 @@ import { ChevronDown, Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { resolveExtraPrice } from '@/lib/extra-price';
 import { formatMoney } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import type { ProductDetail } from '@/server/repositories/product.repository';
@@ -48,9 +49,14 @@ export function ProductCard({ product }: { product: ProductDetail }) {
 
   const availableExtras = product.extras.filter((entry) => entry.extra.isActive);
 
-  /** Mirrors `pricing.service`: the chosen size sets the add-on price. */
+  /** Mirrors `pricing.service`: the chosen size and the add-on's tier set the price. */
   function extraUnitPrice(entry: (typeof availableExtras)[number]) {
-    return selectedOption?.extraPrice ?? entry.priceOverride ?? entry.extra.price;
+    return resolveExtraPrice({
+      size: selectedOption ?? null,
+      isPremium: entry.extra.isPremium,
+      priceOverride: entry.priceOverride,
+      catalogPrice: entry.extra.price,
+    });
   }
 
   const chosenExtras = availableExtras.filter((entry) => selectedExtraIds.includes(entry.extraId));
@@ -82,6 +88,7 @@ export function ProductCard({ product }: { product: ProductDetail }) {
                 optionName: selectedOption.name,
                 priceDelta: selectedOption.priceDelta,
                 extraPrice: selectedOption.extraPrice,
+                extraPremiumPrice: selectedOption.extraPremiumPrice,
               },
             ]
           : [],

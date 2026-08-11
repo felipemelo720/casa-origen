@@ -4,6 +4,8 @@ import { productRepository } from '@/server/repositories/product.repository';
 import { promotionRepository, couponRepository } from '@/server/repositories/promotion.repository';
 import { communeRepository, settingsRepository } from '@/server/repositories/operations.repository';
 import { nonNegative, percentageOf, sumMoney } from '@/lib/money';
+import { bundleDiscount, type BundleUnit } from '@/lib/bundle-promo';
+import { resolveExtraPrice, type SizeExtraPricing } from '@/lib/extra-price';
 import { BusinessRuleError, NotFoundError } from '@/lib/errors';
 import type { CartItemInput } from '@/schemas/cart.schema';
 
@@ -102,12 +104,15 @@ async function priceItem(input: CartItemInput): Promise<PricedItem> {
     }
   }
 
-  // The carta charges add-ons by pizza size, not by add-on: $700 on a 24 cm and
-  // $1.000 on a 32 cm, whatever you put on top. So the selected size wins over
-  // the extra's own catalogue price whenever it carries one.
-  const sizeExtraPrice = selectedVariants.reduce<number | null>((price, variant) => {
+  // The carta charges add-ons by pizza size *and* by tier, so the size that is
+  // selected wins over the add-on's own catalogue price whenever it prices
+  // add-ons at all. Only the option is resolved here; the amount depends on
+  // which add-on is being priced.
+  const selectedSize = selectedVariants.reduce<SizeExtraPricing | null>((size, variant) => {
     const option = variantsByOption.get(variant.optionId)?.option;
-    return option?.extraPrice ?? price;
+    return option?.extraPrice != null
+      ? { extraPrice: option.extraPrice, extraPremiumPrice: option.extraPremiumPrice }
+      : size;
   }, null);
 
   const extrasByProduct = new Map(product.extras.map((entry) => [entry.extraId, entry]));
@@ -121,7 +126,12 @@ async function priceItem(input: CartItemInput): Promise<PricedItem> {
     selectedExtras.push({
       extraId: entry.extra.id,
       name: entry.extra.name,
-      unitPrice: sizeExtraPrice ?? entry.priceOverride ?? entry.extra.price,
+      unitPrice: resolveExtraPrice({
+        size: selectedSize,
+        isPremium: entry.extra.isPremium,
+        priceOverride: entry.priceOverride,
+        catalogPrice: entry.extra.price,
+      }),
       quantity,
     });
   }
@@ -171,6 +181,16 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
   let promotionDiscount = 0;
   let promotionId: string | null = null;
 
+  // One entry per single pizza — a line of quantity 2 counts twice — so a
+  // bundle rule can pair units across lines and inside a single line alike.
+  const bundleUnits: BundleUnit[] = items.flatMap((item) =>
+    Array.from({ length: item.quantity }, () => ({
+      productId: item.productId,
+      unitPrice: item.unitPrice,
+      variantNames: item.variants.map((variant) => variant.optionName),
+    })),
+  );
+
   for (const promo of activePromotions) {
     if (subtotal < promo.minSubtotal) continue;
 
@@ -181,8 +201,25 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
 
     if (!applies) continue;
 
-    const raw =
-      promo.discountType === 'PERCENTAGE' ? percentageOf(subtotal, promo.value) : promo.value;
+    let raw: number;
+    if (promo.discountType === 'BUNDLE_PRICE') {
+      raw = bundleDiscount(bundleUnits, {
+        promotionId: promo.id,
+        name: promo.name,
+        bundlePrice: promo.value,
+        bundleSize: promo.bundleSize,
+        variantName: promo.bundleVariantName ?? '',
+        eligibleProductIds:
+          promo.scope === 'PRODUCT' ? promo.products.map((entry) => entry.productId) : [],
+      });
+      // An incomplete bundle grants nothing. Unlike the other kinds it must not
+      // win the loop either, or a cart with one lonely 32 cm would swallow the
+      // promotion slot and block every lower-priority discount behind it.
+      if (raw <= 0) continue;
+    } else {
+      raw = promo.discountType === 'PERCENTAGE' ? percentageOf(subtotal, promo.value) : promo.value;
+    }
+
     const capped = promo.maxDiscount ? Math.min(raw, promo.maxDiscount) : raw;
 
     promotionDiscount = nonNegative(capped);

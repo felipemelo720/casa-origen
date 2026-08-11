@@ -68,6 +68,10 @@ enum VariantSelectionType {
 enum DiscountType {
   PERCENTAGE
   FIXED
+  /// A fixed price for a whole group of N matching units ("2 de 32 cm por
+  /// $17.990"). `value` is the price of the bundle, not the discount: the
+  /// engine derives the discount from what those units would have cost.
+  BUNDLE_PRICE
 }
 
 enum PromotionScope {
@@ -358,11 +362,15 @@ model VariantOption {
   name        String
   /// Signed delta applied to the product price, in minor currency units.
   priceDelta  Int     @default(0)
-  /// Unit price charged for any add-on while this option is selected, in minor
-  /// currency units. The carta prices toppings by pizza size ($700 on 24 cm,
-  /// $1.000 on 32 cm) and not by topping, so the size owns the number. `null`
-  /// falls back to the extra's own catalogue price.
+  /// Unit price charged for a **standard** add-on while this option is
+  /// selected, in minor currency units. The carta prices toppings by pizza size
+  /// and by tier, not by topping: $700 on a 24 cm and $1.200 on a 32 cm for the
+  /// vegetable ones. `null` falls back to the extra's own catalogue price.
   extraPrice  Int?
+  /// Same, for an add-on flagged `Extra.isPremium` ($1.000 / $1.500). `null`
+  /// falls back to `extraPrice`, so a size that does not split by tier keeps
+  /// charging one number for everything.
+  extraPremiumPrice Int?
   isDefault   Boolean @default(false)
   isAvailable Boolean @default(true)
   sortOrder   Int     @default(0)
@@ -386,6 +394,11 @@ model Extra {
   slug        String  @unique
   description String?
   price       Int     @default(0)
+  /// The carta splits add-ons into two tiers, "Vegetales" and "Premium", and
+  /// charges each at its own pair of prices. The tier lives here and the two
+  /// prices live on the size option (`VariantOption.extraPrice` /
+  /// `extraPremiumPrice`), because what a topping costs depends on both.
+  isPremium   Boolean @default(false)
   isActive    Boolean @default(true)
   sortOrder   Int     @default(0)
 
@@ -436,6 +449,19 @@ model Promotion {
   isActive     Boolean        @default(true)
   startsAt     DateTime
   endsAt       DateTime?
+
+  /// BUNDLE_PRICE only: how many matching units make one bundle.
+  bundleSize         Int     @default(0)
+  /// BUNDLE_PRICE only: the `VariantOption.name` every unit must carry
+  /// ("32 cm"). Matched by name and not by id on purpose — each product owns
+  /// its own size rows, so an id would only ever cover a single pizza.
+  bundleVariantName  String?
+  /// Storefront copy for the size the bundle is sold at ("32 cm").
+  bundleSizeLabel    String?
+  /// When true the landing renders the bundle builder above the menu.
+  isFeatured         Boolean @default(false)
+  /// Photo for the builder header and the landing card.
+  image              String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

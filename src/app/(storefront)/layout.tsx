@@ -8,23 +8,30 @@ import {
   paymentMethodRepository,
   settingsRepository,
 } from '@/server/repositories/operations.repository';
+import { promotionRepository } from '@/server/repositories/promotion.repository';
 import { getOpenState, getWeeklySchedule } from '@/server/services/schedule.service';
+import { toBundleRule } from '@/features/promo/duo-promo-view';
 import type { CartAddOn } from '@/features/cart/cart-drawer';
 import type { CheckoutOptions } from '@/features/checkout/checkout-form';
 
 export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
   // Same check the checkout enforces, so the badge cannot say "abierto" while
   // `placeOrder` refuses the order.
-  const [settings, open, schedule, addOns, communes, paymentMethods] = await Promise.all([
-    settingsRepository.get(),
-    getOpenState(),
-    getWeeklySchedule(),
-    productRepository.findAddOnsByProduct(),
-    // Rendered by the checkout inside the drawer. Loaded here so the form is
-    // complete on its first paint instead of fetching after it opens.
-    communeRepository.findAllActive(),
-    paymentMethodRepository.findAllActive(),
-  ]);
+  const [settings, open, schedule, addOns, communes, paymentMethods, featuredBundle] =
+    await Promise.all([
+      settingsRepository.get(),
+      getOpenState(),
+      getWeeklySchedule(),
+      productRepository.findAddOnsByProduct(),
+      // Rendered by the checkout inside the drawer. Loaded here so the form is
+      // complete on its first paint instead of fetching after it opens.
+      communeRepository.findAllActive(),
+      paymentMethodRepository.findAllActive(),
+      // The drawer lives in the layout, so the bundle rule has to be resolved
+      // here too: the cart is reachable from every storefront route, not only
+      // from the landing that renders the promo card.
+      promotionRepository.findFeaturedBundle(),
+    ]);
 
   // Keyed by product so the drawer can look up a line's add-ons in one hop.
   // Narrowed here: `CartDrawer` is a client component and these are Prisma rows.
@@ -33,6 +40,7 @@ export default async function StorefrontLayout({ children }: { children: React.R
       extraId: row.extra.id,
       name: row.extra.name,
       price: row.priceOverride ?? row.extra.price,
+      isPremium: row.extra.isPremium,
     });
     return byProduct;
   }, {});
@@ -84,7 +92,11 @@ export default async function StorefrontLayout({ children }: { children: React.R
         deliveryEtaMinutes={settings.deliveryEtaMinutes}
         pickupEtaMinutes={settings.pickupEtaMinutes}
       />
-      <CartDrawerMount addOnsByProduct={addOnsByProduct} checkoutOptions={checkoutOptions} />
+      <CartDrawerMount
+        addOnsByProduct={addOnsByProduct}
+        checkoutOptions={checkoutOptions}
+        bundleRule={toBundleRule(featuredBundle)}
+      />
     </div>
   );
 }

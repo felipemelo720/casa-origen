@@ -8,21 +8,49 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { resolveExtraPrice } from '@/lib/extra-price';
 import { formatMoney } from '@/lib/money';
+import {
+  bundleDiscount,
+  unitsToNextBundle,
+  type BundleRule,
+  type BundleUnit,
+} from '@/lib/bundle-promo';
 import { cn } from '@/lib/utils';
 import { estimateLineTotal, useCartStore, type CartLine } from '@/features/cart/cart-store';
 import { CheckoutForm, type CheckoutOptions } from '@/features/checkout/checkout-form';
 import { QueryProvider } from '@/components/providers/query-provider';
 
 /** One add-on offered for a product, with its catalogue price as the fallback. */
-export type CartAddOn = { extraId: string; name: string; price: number };
+export type CartAddOn = { extraId: string; name: string; price: number; isPremium: boolean };
 
 export type CartDrawerProps = {
   addOnsByProduct: Record<string, CartAddOn[]>;
   checkoutOptions: CheckoutOptions;
+  /** Featured bundle promotion, so the drawer prints the same discount the
+   *  server will charge. `null` when none is running. */
+  bundleRule: BundleRule | null;
 };
 
-export function CartDrawer({ addOnsByProduct, checkoutOptions }: CartDrawerProps) {
+/** "las dos" y no "las 2": la cifra al lado del precio se lee como parte del precio. */
+function spellOut(count: number): string {
+  return ['cero', 'una', 'dos', 'tres', 'cuatro'][count] ?? String(count);
+}
+
+/** One entry per single pizza, mirroring what `pricing.service` feeds the rule. */
+function toBundleUnits(lines: CartLine[]): BundleUnit[] {
+  return lines.flatMap((line) => {
+    const unitPrice = line.basePrice + line.variants.reduce((sum, v) => sum + v.priceDelta, 0);
+    const variantNames = line.variants.map((v) => v.optionName);
+    return Array.from({ length: line.quantity }, () => ({
+      productId: line.productId,
+      unitPrice,
+      variantNames,
+    }));
+  });
+}
+
+export function CartDrawer({ addOnsByProduct, checkoutOptions, bundleRule }: CartDrawerProps) {
   const isOpen = useCartStore((state) => state.isOpen);
   const close = useCartStore((state) => state.close);
   const lines = useCartStore((state) => state.lines);
@@ -34,10 +62,17 @@ export function CartDrawer({ addOnsByProduct, checkoutOptions }: CartDrawerProps
   const [placed, setPlaced] = useState<{ code: string; whatsappUrl: string | null }>();
   const [addingTo, setAddingTo] = useState<string>();
 
-  /** Same rule as the card and as `pricing.service`: the size sets the price. */
+  /** Same rule as the card and as `pricing.service`: the size and the tier set
+   *  the price. */
   function addOnPrice(line: CartLine, addOn: CartAddOn) {
-    const fromSize = line.variants.find((v) => v.extraPrice != null)?.extraPrice;
-    return fromSize ?? addOn.price;
+    const size = line.variants.find((v) => v.extraPrice != null);
+    return resolveExtraPrice({
+      size: size
+        ? { extraPrice: size.extraPrice ?? null, extraPremiumPrice: size.extraPremiumPrice ?? null }
+        : null,
+      isPremium: addOn.isPremium,
+      catalogPrice: addOn.price,
+    });
   }
 
   function toggleAddOn(line: CartLine, addOn: CartAddOn) {
@@ -71,6 +106,13 @@ export function CartDrawer({ addOnsByProduct, checkoutOptions }: CartDrawerProps
   }, [isOpen]);
 
   const subtotal = lines.reduce((sum, line) => sum + estimateLineTotal(line), 0);
+
+  const bundleUnits = bundleRule ? toBundleUnits(lines) : [];
+  const promoDiscount = bundleRule ? bundleDiscount(bundleUnits, bundleRule) : 0;
+  // Non-zero only when a bundle is already half-built: suggesting a second
+  // pizza to somebody who has not added a single qualifying one is an ad, not
+  // help.
+  const missingForBundle = bundleRule ? unitsToNextBundle(bundleUnits, bundleRule) : 0;
 
   // The drawer stays open: the WhatsApp link needs a real tap to survive the
   // mobile popup blocker, so the customer has to see it before anything closes.
@@ -285,10 +327,34 @@ export function CartDrawer({ addOnsByProduct, checkoutOptions }: CartDrawerProps
             </ScrollArea>
 
             <SheetFooter className="border-border flex-col gap-3 border-t px-4 pt-4">
+              {bundleRule && missingForBundle > 0 && (
+                <p
+                  role="status"
+                  className="border-primary/40 bg-primary/5 text-foreground rounded-lg border px-3 py-2 text-sm"
+                >
+                  Agrega {missingForBundle === 1 ? 'otra' : `${missingForBundle} más`} de{' '}
+                  {bundleRule.variantName} y las {spellOut(bundleRule.bundleSize)} te salen{' '}
+                  <span className="font-semibold">{formatMoney(bundleRule.bundlePrice)}</span>.
+                </p>
+              )}
+
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-semibold">{formatMoney(subtotal)}</span>
               </div>
+
+              {promoDiscount > 0 && (
+                <>
+                  <div className="text-success flex items-center justify-between text-sm">
+                    <span>{bundleRule?.name}</span>
+                    <span className="font-semibold">−{formatMoney(promoDiscount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-base">
+                    <span className="font-medium">Total</span>
+                    <span className="font-bold">{formatMoney(subtotal - promoDiscount)}</span>
+                  </div>
+                </>
+              )}
               <Separator />
               <Button size="lg" className="w-full" onClick={() => setStep('checkout')}>
                 Continuar al pago

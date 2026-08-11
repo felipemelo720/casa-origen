@@ -17,6 +17,11 @@ const buttonVariants = cva(
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
         link: 'text-primary underline-offset-4 hover:underline',
+        // Para bloques pintados con `bg-primary`, donde el botón `default`
+        // desaparecería contra su propio fondo: se invierte el par de tokens.
+        // El anillo de foco también, o queda invisible sobre el acento.
+        onPrimary:
+          'bg-primary-foreground text-primary hover:bg-primary-foreground/90 focus-visible:ring-primary-foreground/60 focus-visible:border-primary-foreground',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

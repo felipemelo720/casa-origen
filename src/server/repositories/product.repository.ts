@@ -82,7 +82,7 @@ export const productRepository = {
       select: {
         productId: true,
         priceOverride: true,
-        extra: { select: { id: true, name: true, price: true } },
+        extra: { select: { id: true, name: true, price: true, isPremium: true } },
       },
     });
   },
@@ -112,6 +112,7 @@ export const productRepository = {
                 name: true,
                 priceDelta: true,
                 extraPrice: true,
+                extraPremiumPrice: true,
                 isAvailable: true,
               },
             },
@@ -122,7 +123,9 @@ export const productRepository = {
             extraId: true,
             priceOverride: true,
             maxQuantity: true,
-            extra: { select: { id: true, name: true, price: true, isActive: true } },
+            extra: {
+              select: { id: true, name: true, price: true, isActive: true, isPremium: true },
+            },
           },
         },
       },

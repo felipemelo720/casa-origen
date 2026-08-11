@@ -279,36 +279,85 @@ async function seedTagsAndIngredients() {
   }
 }
 
-/** Add-on prices, straight from the carta: $700 on a 24 cm, $1.000 on a 32 cm. */
+/** Add-on prices, straight from the carta: two tiers × two sizes.
+ *
+ *  |            | 24 cm  | 32 cm  |
+ *  | Vegetales  |  $700  | $1.200 |
+ *  | Premium    | $1.000 | $1.500 |
+ *
+ *  Both dimensions matter, so neither can own the number alone: the tier is a
+ *  flag on the add-on (`Extra.isPremium`) and the two prices hang off the size
+ *  option. */
 const EXTRA_PRICE_24 = 700;
-const EXTRA_PRICE_32 = 1000;
+const EXTRA_PRICE_32 = 1200;
+const EXTRA_PREMIUM_PRICE_24 = 1000;
+const EXTRA_PREMIUM_PRICE_32 = 1500;
 
-/** The carta's add-ons, in its own order. Every one costs the same; what moves
- *  the price is the pizza size, so the amount lives on the size option
- *  (`VariantOption.extraPrice`) and `price` here is only the 24 cm fallback for
- *  a product sold without sizes. */
+/** The carta's add-ons, in its own order: vegetales first, then premium.
+ *
+ *  `slug` is pinned instead of derived from `name` for the same reason as the
+ *  communes: the carta calls it "Queso extra" and the first seed wrote "Extra
+ *  queso", and deriving the slug would mint a second row and retire the
+ *  original — with `order_item_extras` still pointing at it.
+ *
+ *  `price` is only the fallback for a product sold without sizes; what a
+ *  topping really costs comes from the selected size. */
 const PIZZA_EXTRAS = [
-  'Cebolla morada',
-  'Tomate cherry',
-  'Extra queso',
-  'Champiñón',
-  'Pimentón',
-  'Aceituna',
-  'Choclo',
-  'Tocino',
-  'Jamón pierna',
-  'Salame',
-  'Pepperoni',
+  { slug: 'cebolla-morada', name: 'Cebolla morada', isPremium: false },
+  { slug: 'tomate-cherry', name: 'Tomate cherry', isPremium: false },
+  { slug: 'pimenton', name: 'Pimentón', isPremium: false },
+  { slug: 'aceituna', name: 'Aceituna', isPremium: false },
+  { slug: 'choclo', name: 'Choclo', isPremium: false },
+  { slug: 'albahaca-fresca', name: 'Albahaca fresca', isPremium: false },
+  { slug: 'pepperoni', name: 'Pepperoni', isPremium: true },
+  { slug: 'jamon-pierna', name: 'Jamón pierna', isPremium: true },
+  { slug: 'tocino', name: 'Tocino', isPremium: true },
+  { slug: 'salame', name: 'Salame', isPremium: true },
+  { slug: 'champinon', name: 'Champiñón', isPremium: true },
+  { slug: 'extra-queso', name: 'Queso extra', isPremium: true },
 ];
 
 async function seedExtras() {
-  const slugs = PIZZA_EXTRAS.map(slugify);
+  const slugs = PIZZA_EXTRAS.map((extra) => extra.slug);
 
-  for (const [index, name] of PIZZA_EXTRAS.entries()) {
+  // `Extra.name` is unique and a retired row from an older seed can be sitting
+  // on a name the carta now uses ("Queso extra" lived on the dead
+  // `queso-extra` while the live row was called "Extra queso"). Park the
+  // squatter under a suffixed name instead of deleting it: `order_item_extras`
+  // still points at it.
+  for (const extra of PIZZA_EXTRAS) {
+    const squatter = await prisma.extra.findUnique({
+      where: { name: extra.name },
+      select: { id: true, slug: true },
+    });
+    if (squatter && squatter.slug !== extra.slug) {
+      await prisma.extra.update({
+        where: { id: squatter.id },
+        data: { name: `${extra.name} (retirado)`, isActive: false },
+      });
+    }
+  }
+
+  for (const [index, extra] of PIZZA_EXTRAS.entries()) {
+    const price = extra.isPremium ? EXTRA_PREMIUM_PRICE_24 : EXTRA_PRICE_24;
     await prisma.extra.upsert({
-      where: { slug: slugify(name) },
-      update: { name, price: EXTRA_PRICE_24, isActive: true, sortOrder: index },
-      create: { name, slug: slugify(name), price: EXTRA_PRICE_24, sortOrder: index },
+      where: { slug: extra.slug },
+      // `name`, `price` e `isPremium` se repiten en `update` porque son
+      // justo los que hay que poder corregir sin resetear la base.
+      update: {
+        name: extra.name,
+        price,
+        isPremium: extra.isPremium,
+        isActive: true,
+        sortOrder: index,
+      },
+      create: {
+        name: extra.name,
+        slug: extra.slug,
+        price,
+        isPremium: extra.isPremium,
+        sortOrder: index,
+      },
     });
   }
 
@@ -333,9 +382,16 @@ type ProductSeed = {
   ingredients?: string[];
   variants?: {
     name: string;
-    options: { name: string; priceDelta: number; extraPrice?: number; isDefault?: boolean }[];
+    options: {
+      name: string;
+      priceDelta: number;
+      extraPrice?: number;
+      extraPremiumPrice?: number;
+      isDefault?: boolean;
+    }[];
   }[];
-  extras?: string[];
+  /** Referenced by pinned slug, not by name: see `PIZZA_EXTRAS`. */
+  extras?: { slug: string }[];
 };
 
 type CategorySeed = {
@@ -348,13 +404,24 @@ type CategorySeed = {
 
 // Two sizes, and the jump to 32 cm is not the same for every pizza: the carta
 // prices each pair on its own, so the delta is a per-product argument instead
-// of the shared constant this used to be. `extraPrice` rides along because the
-// carta also charges add-ons by size, not by add-on.
+// of the shared constant this used to be. Both add-on prices ride along
+// because the carta charges toppings by size *and* by tier.
 const pizzaSizes = (deltaTo32: number) => ({
   name: 'Tamaño',
   options: [
-    { name: '24 cm', priceDelta: 0, extraPrice: EXTRA_PRICE_24, isDefault: true },
-    { name: '32 cm', priceDelta: deltaTo32, extraPrice: EXTRA_PRICE_32 },
+    {
+      name: '24 cm',
+      priceDelta: 0,
+      extraPrice: EXTRA_PRICE_24,
+      extraPremiumPrice: EXTRA_PREMIUM_PRICE_24,
+      isDefault: true,
+    },
+    {
+      name: '32 cm',
+      priceDelta: deltaTo32,
+      extraPrice: EXTRA_PRICE_32,
+      extraPremiumPrice: EXTRA_PREMIUM_PRICE_32,
+    },
   ],
 });
 
@@ -554,7 +621,7 @@ async function upsertProduct(product: ProductSeed, categoryId: string, sortOrder
 
   await prisma.productExtra.deleteMany({ where: { productId: record.id } });
   if (product.extras?.length) {
-    const wanted = product.extras.map(slugify);
+    const wanted = product.extras.map((extra) => extra.slug);
     const extras = await prisma.extra.findMany({
       where: { slug: { in: wanted } },
       select: { id: true, slug: true },
@@ -588,6 +655,7 @@ async function upsertProduct(product: ProductSeed, categoryId: string, sortOrder
                 name: option.name,
                 priceDelta: option.priceDelta,
                 extraPrice: option.extraPrice ?? null,
+                extraPremiumPrice: option.extraPremiumPrice ?? null,
                 isDefault: option.isDefault ?? false,
                 sortOrder: optionIndex,
               })),
@@ -736,6 +804,51 @@ async function seedPromotionsAndCoupons() {
       priority: 10,
       startsAt: new Date(),
       isActive: false,
+    },
+  });
+
+  // Promo Dúo: dos pizzas de 32 cm por $17.990. `scope: CATEGORY` sobre pizzas
+  // y no una lista de productos: la única variante llamada "32 cm" vive en las
+  // pizzas, así que el filtro de tamaño ya acota el set, y una pizza nueva
+  // entra a la promo sin tocar el seed. Para dejar una afuera (la Mechada es
+  // la que más margen regala: el par vale $25.000), se cambia `scope` a
+  // PRODUCT y se listan las que sí entran en `promotion_products`.
+  const pizzas = await prisma.category.findUnique({
+    where: { slug: 'pizzas' },
+    select: { id: true },
+  });
+
+  const duo = {
+    name: 'Promo Dúo',
+    description: 'Dos pizzas de 32 cm por un solo precio.',
+    discountType: 'BUNDLE_PRICE',
+    value: 17990,
+    scope: 'CATEGORY',
+    bundleSize: 2,
+    bundleVariantName: '32 cm',
+    bundleSizeLabel: '32 cm',
+    isFeatured: true,
+    // Foto propia. El flyer original trae el precio quemado en el JPG: sirve
+    // para Instagram y no para la landing, donde el precio lo pinta el server
+    // y tiene que seguir siendo legible en dark mode y a 360px.
+    image: '/hero/margarita.jpg',
+    priority: 20,
+    isActive: true,
+  } as const;
+
+  await prisma.promotion.upsert({
+    where: { slug: 'promo-duo' },
+    // Repetido en `update` porque es el precio de la promo: el operador tiene
+    // que poder corregirlo con un seed y sin resetear la base.
+    update: {
+      ...duo,
+      categories: pizzas ? { deleteMany: {}, create: [{ categoryId: pizzas.id }] } : undefined,
+    },
+    create: {
+      slug: 'promo-duo',
+      ...duo,
+      startsAt: new Date(),
+      categories: pizzas ? { create: [{ categoryId: pizzas.id }] } : undefined,
     },
   });
 }

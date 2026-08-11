@@ -1215,6 +1215,94 @@ por CDP en 360/768/1280 × claro/oscuro, en `/` y en `/admin`: cero.
 **Falta.** El `areaServed` del JSON-LD sigue sin los sectores — es SEO local
 gratis («pizza Champa», «pizza Viluco») y quedó fuera de este corte.
 
+## Promo Dúo: precio de paquete, no descuento (2026-08-11)
+
+**Problema.** La oferta del local es «dos pizzas de 32 cm por $17.990». El motor
+de promociones solo sabía restar un porcentaje o un monto fijo del subtotal, y
+ninguna de las dos formas expresa esto: el descuento real cambia según el par
+elegido ($2.010 con dos Pepperoni, $7.010 con dos Mechada). Modelarlo como
+cupón `FIXED` habría cobrado mal en seis de los siete casos.
+
+**Modelo.** `DiscountType.BUNDLE_PRICE`, donde `value` es el **precio del
+paquete** y no el descuento; el motor deriva la rebaja de lo que esas unidades
+habrían costado sueltas. `Promotion` gana `bundleSize`, `bundleVariantName`,
+`bundleSizeLabel`, `isFeatured` e `image`.
+
+`bundleVariantName` matchea por **nombre** de `VariantOption` («32 cm») y no por
+id: cada producto tiene su propia fila de tamaño, así que un id habría cubierto
+una sola pizza. El costo asumido es que renombrar la opción en el admin apaga la
+promo en silencio.
+
+**La regla vive en `src/lib/bundle-promo.ts`, puro y sin `server-only`.**
+`pricing.service` sigue siendo la autoridad de lo que se cobra, pero el carrito
+tiene que mostrar el mismo descuento apenas cae la segunda pizza: si no, el
+total baja recién en el checkout y eso se lee como un bug de precios, no como
+una oferta. Un archivo, dos consumidores, una suite de tests — en vez de una
+copia servidor y una copia cliente que se desincronizan.
+
+**Cómo empareja.** Una entrada por pizza individual (una línea de cantidad 2
+cuenta dos veces), solo paquetes completos, y **de la más cara hacia abajo**:
+quien agrega tres de 32 cm recibe la promo sobre las dos más caras, que es
+justo el par que el armador le prometió. Los extras nunca entran al precio del
+paquete — se cobran encima, así que sumar tocino no es una forma de que salga
+gratis. Un paquete configurado más caro que su contenido no agrega recargo: no
+otorga nada.
+
+**Un paquete incompleto hace `continue`, no `break`.** Es la única forma de
+descuento que puede aplicar al scope y aun así valer 0; si ganara el slot de
+promoción, un carrito con una sola pizza de 32 cm bloquearía cualquier
+promoción de menor prioridad detrás.
+
+**Alcance.** `scope: CATEGORY` sobre pizzas y no una lista de productos: la
+única variante «32 cm» vive en las pizzas, así que el filtro de tamaño ya acota
+el conjunto y una pizza nueva entra sola. **La Mechada entra** — el flyer no
+anuncia exclusiones y prometer un precio que el server no cumple rompe la regla
+de honestidad de estado. Es la que más margen regala (el par vale $25.000). Para
+sacarla: `scope: PRODUCT` + filas en `promotion_products`, sin tocar código.
+
+**El armador, no una carta filtrada.** `duo-builder.tsx` es un sheet inferior
+con dos ranuras visibles desde el segundo cero: vacía en borde punteado, llena
+con foto y «Cambiar». La grilla se re-titula sola («Elige la primera» → «Elige
+la segunda» → «Tu dúo está listo») en vez de mostrar un contador `1/2`. Al
+completarse, las tiles restantes se apagan pero **no desaparecen**, y recién ahí
+aparece la fila de bebidas: antes competiría con la única decisión que importa y
+el total dejaría de coincidir con el número grande de la cabecera.
+
+**El ancla mejora mientras elige.** Antes de completar muestra `regularFrom` (el
+par más barato de la carta, el mismo «desde $20.000» de la card); completo,
+muestra lo que **esas** pizzas habrían costado. El número se vuelve más honesto
+y más grande al mismo tiempo.
+
+**Agrega dos líneas normales, no un ítem opaco «Promo Dúo».** El cliente puede
+editar cada pizza, la comanda dice dos pizzas, y el descuento sale de que
+`pricing.service` reconozca el par. Si después borra una, la promo se cae sola
+en el mismo lugar donde apareció.
+
+**Red de seguridad.** Con un paquete a medio armar, el carrito ofrece
+completarlo («Agrega otra de 32 cm y las dos te salen $17.990»). Solo entonces:
+sugerirle una segunda pizza a quien no agregó ninguna que califique es
+publicidad, no ayuda.
+
+**Costo declarado.** La card empuja «Los más pedidos» y la carta ~200px abajo en
+móvil. Se paga porque es el único bloque de la landing que baja el precio de un
+pedido completo. El armador (grilla + sheet + motion) queda en su propio chunk
+de 13,6 kB que solo se descarga al tocar el botón; la landing sigue estática con
+`revalidate = 60`.
+
+**Cierre propio en el sheet.** `showCloseButton={false}`: el de la primitiva es
+un icono de 16px sobre la foto de cabecera, bajo el objetivo táctil de 44px y
+sin contraste garantizado contra la imagen.
+
+**Verificado.** 182 unitarios + 10 de integración. Recorrido completo por CDP a
+360px en claro y oscuro: sheet abre, las tres cabeceras rotan, las 7 tiles se
+apagan al completar, el carrito queda en Subtotal $20.000 / Promo Dúo −$2.010 /
+Total $17.990, dos líneas persistidas con «32 cm», cero errores de consola y
+cero scroll horizontal. `npm run build` con el dev apagado.
+
+**Falta.** El admin todavía no edita un `BUNDLE_PRICE` (se configura por seed).
+Sin badge «Promo Dúo» en las cards del menú: quien se salta la card se entera
+recién en el carrito.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros
