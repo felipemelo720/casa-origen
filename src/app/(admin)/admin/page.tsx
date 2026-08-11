@@ -30,9 +30,18 @@ export const dynamic = 'force-dynamic';
 /**
  * Un día cerrado se guarda como 00:00–00:00. Mostrar eso al destildar «Cerrado»
  * dejaría abrir el día con una ventana de cero minutos, así que el form parte de
- * un horario usable y el operador solo lo corrige si hace falta.
+ * un horario usable y el operador solo lo corrige si hace falta: el turno
+ * partido real del local, 12:30–15:00 y 18:00–22:00.
+ *
+ * Solo se precargan en un día **cerrado**. En un día abierto con un turno
+ * único, precargar el segundo le inventaría una franja al guardar.
  */
-const FALLBACK_HOURS = { opensAt: '12:00', closesAt: '23:00' } as const;
+const FALLBACK_SHIFTS = [
+  { opensAt: '12:30', closesAt: '15:00' },
+  { opensAt: '18:00', closesAt: '22:00' },
+] as const;
+
+const EMPTY_SHIFT = { opensAt: '', closesAt: '' } as const;
 
 export default async function AdminPage() {
   const isAuthenticated = await isAdminAuthenticated();
@@ -195,7 +204,8 @@ export default async function AdminPage() {
           <div>
             <p className="text-muted-foreground text-xs tracking-widest uppercase">Horarios</p>
             <p className="text-muted-foreground mt-1 text-xs">
-              Estos son los horarios que se muestran en la web.
+              Estos son los horarios que se muestran en la web. Deja el turno 2 en blanco si ese día
+              no cierras al mediodía.
             </p>
           </div>
           <AdminForm action={updateBusinessHoursAction} className="space-y-2">
@@ -203,48 +213,68 @@ export default async function AdminPage() {
               Cabecera solo desde `lg`: en móvil los inputs se envuelven y los
               rótulos dejarían de caer sobre su columna.
             */}
-            <div className="text-muted-foreground/70 hidden grid-cols-[4.5rem_1fr] items-center gap-3 text-[10px] tracking-widest uppercase lg:grid">
+            <div className="text-muted-foreground/70 hidden grid-cols-[4.5rem_1fr_1fr_6.5rem] items-center gap-3 text-[10px] tracking-widest uppercase lg:grid">
               <span>Día</span>
-              <div className="flex min-w-0 items-center gap-x-2">
-                <span className="min-w-0 flex-1">Desde</span>
-                <span className="shrink-0 opacity-0" aria-hidden="true">
-                  –
-                </span>
-                <span className="min-w-0 flex-1">Hasta</span>
-                <span className="w-[6.5rem] shrink-0 px-1">Cerrado</span>
-              </div>
+              <span>Turno 1</span>
+              <span>Turno 2</span>
+              <span className="px-1">Cerrado</span>
             </div>
             {/*
               Los inputs se renderizan siempre, también en un día cerrado: un día
               sin input no aparece en `formData` y no había forma de abrirlo. La
               casilla «Cerrado» es lo único que decide, y el server la respeta
               aunque las horas vengan cargadas.
+
+              El turno 2 vacío no es un error: es el día sin corte al mediodía.
+              El server descarta el turno si le falta una de las dos horas, y no
+              cierra el día por eso.
             */}
-            {weeklySchedule.map((day) => (
-              <div
-                key={day.dayOfWeek}
-                className="border-border/60 grid grid-cols-[4.5rem_1fr] items-center gap-3 lg:border-t lg:pt-2"
-              >
-                <span className="text-muted-foreground text-sm font-medium">{day.label}</span>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <Input
-                    type="time"
-                    name={`${day.dayOfWeek}_opensAt`}
-                    defaultValue={day.isClosed ? FALLBACK_HOURS.opensAt : day.opensAt}
-                    aria-label={`${day.label}: hora de apertura`}
-                    className="h-11 min-w-0 flex-1"
-                  />
-                  <span className="text-muted-foreground shrink-0" aria-hidden="true">
-                    –
-                  </span>
-                  <Input
-                    type="time"
-                    name={`${day.dayOfWeek}_closesAt`}
-                    defaultValue={day.isClosed ? FALLBACK_HOURS.closesAt : day.closesAt}
-                    aria-label={`${day.label}: hora de cierre`}
-                    className="h-11 min-w-0 flex-1"
-                  />
-                  <label className="text-muted-foreground flex h-11 shrink-0 cursor-pointer items-center gap-1.5 px-1 text-sm lg:w-[6.5rem]">
+            {weeklySchedule.map((day) => {
+              const first = day.slots[0] ?? FALLBACK_SHIFTS[0];
+              // Un día abierto de un solo turno deja el 2 en blanco a propósito:
+              // precargarlo le inventaría una franja al guardar.
+              const second = day.slots[1] ?? (day.isClosed ? FALLBACK_SHIFTS[1] : EMPTY_SHIFT);
+
+              return (
+                <div
+                  key={day.dayOfWeek}
+                  className="border-border/60 space-y-2 border-t pt-3 lg:grid lg:grid-cols-[4.5rem_1fr_1fr_6.5rem] lg:items-center lg:gap-3 lg:space-y-0 lg:pt-2"
+                >
+                  <span className="text-muted-foreground text-sm font-medium">{day.label}</span>
+
+                  {[first, second].map((shift, index) => {
+                    const shiftNumber = index + 1;
+
+                    return (
+                      <div key={shiftNumber} className="min-w-0">
+                        {/* Desde `lg` el rótulo lo pone la cabecera de columna. */}
+                        <span className="text-muted-foreground/70 mb-1 block text-[10px] tracking-widest uppercase lg:hidden">
+                          Turno {shiftNumber}
+                        </span>
+                        <div className="flex min-w-0 items-center gap-x-2">
+                          <Input
+                            type="time"
+                            name={`${day.dayOfWeek}_${shiftNumber}_opensAt`}
+                            defaultValue={shift.opensAt}
+                            aria-label={`${day.label}, turno ${shiftNumber}: hora de apertura`}
+                            className="h-11 min-w-0 flex-1"
+                          />
+                          <span className="text-muted-foreground shrink-0" aria-hidden="true">
+                            –
+                          </span>
+                          <Input
+                            type="time"
+                            name={`${day.dayOfWeek}_${shiftNumber}_closesAt`}
+                            defaultValue={shift.closesAt}
+                            aria-label={`${day.label}, turno ${shiftNumber}: hora de cierre`}
+                            className="h-11 min-w-0 flex-1"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <label className="text-muted-foreground flex h-11 cursor-pointer items-center gap-1.5 px-1 text-sm">
                     <input
                       type="checkbox"
                       name={`${day.dayOfWeek}_closed`}
@@ -254,8 +284,8 @@ export default async function AdminPage() {
                     Cerrado
                   </label>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <AdminSubmit className="h-11 w-full">Guardar horarios</AdminSubmit>
           </AdminForm>
         </section>

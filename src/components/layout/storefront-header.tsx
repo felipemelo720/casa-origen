@@ -12,7 +12,8 @@ import { Separator } from '@/components/ui/separator';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { useCartCount, useCartStore, useCartSubtotal } from '@/features/cart/cart-store';
 import { formatMoney } from '@/lib/money';
-import type { OpenState } from '@/server/services/schedule.service';
+import { formatShifts } from '@/lib/schedule-format';
+import type { OpenState, ScheduleSlot } from '@/server/services/schedule.service';
 import { cn } from '@/lib/utils';
 
 /**
@@ -38,8 +39,8 @@ const OPEN_STATE_POLL_MS = 60_000;
 
 export type HeaderTodayHours = {
   isClosed: boolean;
-  opensAt: string;
-  closesAt: string;
+  /** Uno o dos turnos: el local corta al mediodía y reabre en la tarde. */
+  slots: ScheduleSlot[];
 };
 
 type Props = {
@@ -169,10 +170,8 @@ export function StorefrontHeader({
           <div className="text-muted-foreground mx-auto flex h-9 max-w-7xl items-center justify-between gap-4 px-4 text-xs sm:px-6 lg:px-8">
             <p className="flex items-center gap-1.5">
               <Clock className="size-3.5 shrink-0" aria-hidden />
-              {todayHours && !todayHours.isClosed ? (
-                <span>
-                  Hoy atendemos de {todayHours.opensAt} a {todayHours.closesAt}
-                </span>
+              {todayHours && !todayHours.isClosed && todayHours.slots.length > 0 ? (
+                <span>Hoy atendemos {formatShifts(todayHours.slots)}</span>
               ) : (
                 <span>Hoy sin horario publicado</span>
               )}
@@ -316,8 +315,8 @@ export function StorefrontHeader({
                   <OpenBadge open={openState} />
                   <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
                     <Clock className="size-3.5 shrink-0" aria-hidden />
-                    {todayHours && !todayHours.isClosed
-                      ? `Hoy ${todayHours.opensAt} – ${todayHours.closesAt}`
+                    {todayHours && !todayHours.isClosed && todayHours.slots.length > 0
+                      ? `Hoy ${formatShifts(todayHours.slots)}`
                       : 'Hoy sin horario publicado'}
                   </p>
                 </div>

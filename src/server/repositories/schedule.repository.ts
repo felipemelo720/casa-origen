@@ -37,11 +37,21 @@ export const scheduleRepository = {
         const isClosed = !day.opensAt || !day.closesAt;
         const opensAtMinutes = isClosed ? 0 : (timeToMinutes(day.opensAt) ?? 0);
         const closesAtMinutes = isClosed ? 0 : (timeToMinutes(day.closesAt) ?? 0);
+        // Un día cerrado no guarda segundo turno: si vuelve a abrir, lo hace con
+        // las horas que el operador escriba, no con las que quedaron colgando.
+        const secondShift =
+          isClosed || !day.opensAt2 || !day.closesAt2
+            ? { opensAt2: null, closesAt2: null }
+            : {
+                opensAt2: timeToMinutes(day.opensAt2),
+                closesAt2: timeToMinutes(day.closesAt2),
+              };
 
         return businessHourRepository.upsertDay(dayNum, {
           isClosed,
           opensAt: opensAtMinutes,
           closesAt: closesAtMinutes,
+          ...secondShift,
         });
       }),
     );

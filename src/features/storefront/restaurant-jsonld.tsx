@@ -62,14 +62,19 @@ export function RestaurantJsonLd({
         }
       : {}),
     ...(sameAs.length > 0 ? { sameAs } : {}),
+    // Un `OpeningHoursSpecification` por turno, no por día: schema.org no tiene
+    // forma de expresar un corte al mediodía dentro de una sola franja, y
+    // declarar 12:30–22:00 le diría a Google que a las 16:00 estamos abiertos.
     openingHoursSpecification: schedule
       .filter((day) => !day.isClosed)
-      .map((day) => ({
-        '@type': 'OpeningHoursSpecification',
-        dayOfWeek: `https://schema.org/${SCHEMA_DAYS[day.dayOfWeek] ?? 'Monday'}`,
-        opens: day.opensAt,
-        closes: day.closesAt,
-      })),
+      .flatMap((day) =>
+        day.slots.map((slot) => ({
+          '@type': 'OpeningHoursSpecification',
+          dayOfWeek: `https://schema.org/${SCHEMA_DAYS[day.dayOfWeek] ?? 'Monday'}`,
+          opens: slot.opensAt,
+          closes: slot.closesAt,
+        })),
+      ),
   };
 
   return (

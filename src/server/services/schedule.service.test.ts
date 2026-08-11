@@ -76,13 +76,80 @@ describe('getWeeklySchedule', () => {
 
   it('formats stored minutes as HH:mm', async () => {
     findAllHours.mockResolvedValue([
-      { dayOfWeek: 1, isClosed: false, opensAt: 570, closesAt: 1320 }, // 09:30–22:00
+      {
+        dayOfWeek: 1,
+        isClosed: false,
+        opensAt: 570,
+        closesAt: 1320,
+        opensAt2: null,
+        closesAt2: null,
+      }, // 09:30–22:00
     ] as never);
     const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
     const monday = week.find((d) => d.dayOfWeek === 1);
-    expect(monday?.opensAt).toBe('09:30');
-    expect(monday?.closesAt).toBe('22:00');
+    expect(monday?.slots).toEqual([{ opensAt: '09:30', closesAt: '22:00' }]);
     expect(monday?.isClosed).toBe(false);
+  });
+
+  it('splits a day with a second shift into two slots', async () => {
+    findAllHours.mockResolvedValue([
+      // 12:30–15:00 y 18:00–22:00
+      {
+        dayOfWeek: 1,
+        isClosed: false,
+        opensAt: 750,
+        closesAt: 900,
+        opensAt2: 1080,
+        closesAt2: 1320,
+      },
+    ] as never);
+    const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
+    expect(week.find((d) => d.dayOfWeek === 1)?.slots).toEqual([
+      { opensAt: '12:30', closesAt: '15:00' },
+      { opensAt: '18:00', closesAt: '22:00' },
+    ]);
+  });
+
+  it('ignores half a second shift', async () => {
+    findAllHours.mockResolvedValue([
+      {
+        dayOfWeek: 1,
+        isClosed: false,
+        opensAt: 750,
+        closesAt: 900,
+        opensAt2: 1080,
+        closesAt2: null,
+      },
+    ] as never);
+    const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
+    expect(week.find((d) => d.dayOfWeek === 1)?.slots).toHaveLength(1);
+  });
+
+  it('ignores second-shift columns the Prisma Client does not know yet', async () => {
+    // Migrar con el dev encendido deja el client viejo en memoria: las columnas
+    // nuevas llegan `undefined`, no `null`, y el admin publicaba «NaN:NaN».
+    findAllHours.mockResolvedValue([
+      { dayOfWeek: 1, isClosed: false, opensAt: 750, closesAt: 900 },
+    ] as never);
+    const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
+    expect(week.find((d) => d.dayOfWeek === 1)?.slots).toEqual([
+      { opensAt: '12:30', closesAt: '15:00' },
+    ]);
+  });
+
+  it('leaves a closed day without slots', async () => {
+    findAllHours.mockResolvedValue([
+      {
+        dayOfWeek: 1,
+        isClosed: true,
+        opensAt: 750,
+        closesAt: 900,
+        opensAt2: 1080,
+        closesAt2: 1320,
+      },
+    ] as never);
+    const week = await getWeeklySchedule(new Date('2026-08-06T12:00:00-04:00'));
+    expect(week.find((d) => d.dayOfWeek === 1)?.slots).toEqual([]);
   });
 
   it('flags only today as isToday', async () => {
@@ -113,7 +180,15 @@ describe('getWeeklySchedule', () => {
 
 describe('updateBusinessHours', () => {
   it('delegates straight to the repository', async () => {
-    const days = [{ dayOfWeek: 'MONDAY' as const, opensAt: '09:00', closesAt: '18:00' }];
+    const days = [
+      {
+        dayOfWeek: 'MONDAY' as const,
+        opensAt: '12:30',
+        closesAt: '15:00',
+        opensAt2: '18:00',
+        closesAt2: '22:00',
+      },
+    ];
     upsertBusinessHours.mockResolvedValue([]);
     await updateBusinessHours(days);
     expect(upsertBusinessHours).toHaveBeenCalledWith(days);

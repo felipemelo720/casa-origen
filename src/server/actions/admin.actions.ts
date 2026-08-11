@@ -137,23 +137,27 @@ export async function updateBusinessHoursAction(_state: AdminResult | null, form
 
     // Arrancar con los 7 días en null y llenarlos desde el form: el array
     // siempre tiene largo 7, que es lo que exige `businessHoursSchema.length(7)`.
+    type HourField = 'opensAt' | 'closesAt' | 'opensAt2' | 'closesAt2';
     const days: Record<
       number,
-      { dayOfWeek: (typeof dayOfWeekMap)[number]; opensAt: string | null; closesAt: string | null }
+      { dayOfWeek: (typeof dayOfWeekMap)[number] } & Record<HourField, string | null>
     > = {};
     dayOfWeekMap.forEach((dayOfWeek, dayNum) => {
-      days[dayNum] = { dayOfWeek, opensAt: null, closesAt: null };
+      days[dayNum] = { dayOfWeek, opensAt: null, closesAt: null, opensAt2: null, closesAt2: null };
     });
 
+    // `<día>_<turno>_<campo>`: el turno va en el name porque el día tiene dos
+    // (12:30–15:00 y 18:00–22:00) y `formData` es plana. El sufijo `2` de la
+    // columna se arma acá; el form solo numera turnos.
     for (const [key, value] of formData.entries()) {
-      const match = key.match(/^(\d+)_(opensAt|closesAt)$/);
-      if (match && match[1] && match[2]) {
+      const match = key.match(/^(\d+)_(1|2)_(opensAt|closesAt)$/);
+      if (match && match[1] && match[2] && match[3]) {
         const dayNum = Number(match[1]);
-        const field = match[2];
+        const field = (match[2] === '2' ? `${match[3]}2` : match[3]) as HourField;
         const day = days[dayNum];
         // Un input vacío es `''`: `String(value || null)` daba la *cadena*
         // `'null'` y reventaba el regex de zod. Vacío significa sin hora.
-        if (day) day[field as 'opensAt' | 'closesAt'] = value ? String(value) : null;
+        if (day) day[field] = value ? String(value) : null;
       }
     }
 
@@ -165,6 +169,17 @@ export async function updateBusinessHoursAction(_state: AdminResult | null, form
       if (isClosed || !day.opensAt || !day.closesAt) {
         day.opensAt = null;
         day.closesAt = null;
+        day.opensAt2 = null;
+        day.closesAt2 = null;
+        continue;
+      }
+
+      // Medio segundo turno no cierra el día: se descarta el turno y el primero
+      // queda en pie. Un turno partido a medio llenar no puede dejar al local
+      // publicado como cerrado de lunes a sábado.
+      if (!day.opensAt2 || !day.closesAt2) {
+        day.opensAt2 = null;
+        day.closesAt2 = null;
       }
     }
 

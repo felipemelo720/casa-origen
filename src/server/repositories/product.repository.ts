@@ -87,6 +87,21 @@ export const productRepository = {
     });
   },
 
+  /**
+   * Add-on prices per size option, for the cart drawer.
+   *
+   * The cart persists a snapshot of these on every line, and a cart saved
+   * before the carta changed keeps quoting the old figures forever. The drawer
+   * prefers this map and falls back to the snapshot, so a stale localStorage
+   * heals itself on the next render instead of lying until someone clears it.
+   */
+  async findSizeExtraPricing() {
+    return prisma.variantOption.findMany({
+      where: { extraPrice: { not: null } },
+      select: { id: true, extraPrice: true, extraPremiumPrice: true },
+    });
+  },
+
   /** Minimal shape needed by the pricing engine — avoids over-fetching. */
   async findForPricing(id: string) {
     return prisma.product.findUnique({

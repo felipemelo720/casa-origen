@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { resolveExtraPrice } from '@/lib/extra-price';
+import { resolveExtraPrice, type SizeExtraPricing } from '@/lib/extra-price';
 import { formatMoney } from '@/lib/money';
 import {
   bundleDiscount,
@@ -26,6 +26,9 @@ export type CartAddOn = { extraId: string; name: string; price: number; isPremiu
 
 export type CartDrawerProps = {
   addOnsByProduct: Record<string, CartAddOn[]>;
+  /** Add-on prices per size option id, straight from the catalogue. Wins over
+   *  the copy the cart line persisted, which can be from an older carta. */
+  sizePricingByOption: Record<string, SizeExtraPricing>;
   checkoutOptions: CheckoutOptions;
   /** Featured bundle promotion, so the drawer prints the same discount the
    *  server will charge. `null` when none is running. */
@@ -50,7 +53,12 @@ function toBundleUnits(lines: CartLine[]): BundleUnit[] {
   });
 }
 
-export function CartDrawer({ addOnsByProduct, checkoutOptions, bundleRule }: CartDrawerProps) {
+export function CartDrawer({
+  addOnsByProduct,
+  sizePricingByOption,
+  checkoutOptions,
+  bundleRule,
+}: CartDrawerProps) {
   const isOpen = useCartStore((state) => state.isOpen);
   const close = useCartStore((state) => state.close);
   const lines = useCartStore((state) => state.lines);
@@ -65,11 +73,19 @@ export function CartDrawer({ addOnsByProduct, checkoutOptions, bundleRule }: Car
   /** Same rule as the card and as `pricing.service`: the size and the tier set
    *  the price. */
   function addOnPrice(line: CartLine, addOn: CartAddOn) {
-    const size = line.variants.find((v) => v.extraPrice != null);
+    const variant = line.variants.find(
+      (v) => sizePricingByOption[v.optionId] != null || v.extraPrice != null,
+    );
+    // Catalogue first, the line's own snapshot second: a cart persisted before
+    // the carta changed still carries the old numbers.
+    const size = variant
+      ? (sizePricingByOption[variant.optionId] ?? {
+          extraPrice: variant.extraPrice ?? null,
+          extraPremiumPrice: variant.extraPremiumPrice ?? null,
+        })
+      : null;
     return resolveExtraPrice({
-      size: size
-        ? { extraPrice: size.extraPrice ?? null, extraPremiumPrice: size.extraPremiumPrice ?? null }
-        : null,
+      size,
       isPremium: addOn.isPremium,
       catalogPrice: addOn.price,
     });

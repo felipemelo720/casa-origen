@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { BrandMark } from '@/components/layout/brand-mark';
 import type { ScheduleDay } from '@/server/services/schedule.service';
 import { cn } from '@/lib/utils';
+import { formatShifts } from '@/lib/schedule-format';
 
 /**
  * Absolute, not a bare `#menu`: the footer renders on every `(storefront)`
@@ -198,8 +199,8 @@ export function StorefrontFooter({
                 )}
               >
                 <dt>{day.label}</dt>
-                <dd className="tabular-nums">
-                  {day.isClosed ? 'Cerrado' : `${day.opensAt} – ${day.closesAt}`}
+                <dd className="text-right tabular-nums">
+                  {day.isClosed ? 'Cerrado' : formatShifts(day.slots)}
                 </dd>
               </div>
             ))}

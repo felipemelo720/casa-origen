@@ -28,7 +28,10 @@ export function DuoPromoCard({ promo, openState }: { promo: DuoPromoView; openSt
   return (
     <section className="mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-8">
       <div className="bg-primary text-primary-foreground rounded-2xl px-5 py-6 sm:px-8 sm:py-8">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+        {/* `items-center` y no `items-end`: la columna del precio es bastante
+            más alta que la del título, y alinearlas por abajo dejaba el título
+            hundido con un hueco muerto arriba. */}
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between sm:gap-10">
           {/* ---- Qué es ---- */}
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-[0.12em] uppercase opacity-80">Oferta</p>

@@ -732,6 +732,11 @@ model BusinessHour {
   /// Minutes from midnight, so comparisons stay integer-only.
   opensAt   Int     @default(720)
   closesAt  Int     @default(1380)
+  /// Second shift of the same day (12:30–15:00 and 18:00–22:00). Null = one
+  /// shift. Two nullable columns instead of a slot table: the shop runs two
+  /// turnos and a table would cost a join on every page render.
+  opensAt2  Int?
+  closesAt2 Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

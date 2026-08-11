@@ -11,14 +11,22 @@ export type OpenState = {
   reason?: string;
 };
 
+/** One shift of a day. `HH:mm`, already formatted; the minutes stay server-side. */
+export type ScheduleSlot = {
+  opensAt: string;
+  closesAt: string;
+};
+
 export type ScheduleDay = {
   /** 0 = Sunday … 6 = Saturday, matching `Date#getDay`. */
   dayOfWeek: number;
   label: string;
   isClosed: boolean;
-  /** `HH:mm`, already formatted; the minutes stay server-side. */
-  opensAt: string;
-  closesAt: string;
+  /**
+   * The day's shifts in order — one, or two when the kitchen closes at 15:00
+   * and reopens at 18:00. Empty on a closed day.
+   */
+  slots: ScheduleSlot[];
   isToday: boolean;
 };
 
@@ -110,13 +118,32 @@ export async function getWeeklySchedule(now: Date = new Date()): Promise<Schedul
 
   return WEEK_ORDER.map((dayOfWeek) => {
     const day = hours.find((h) => h.dayOfWeek === dayOfWeek);
+    const isClosed = day?.isClosed ?? true;
+    const slots: ScheduleSlot[] = [];
+
+    if (day && !isClosed) {
+      slots.push({
+        opensAt: minutesToLocalTime(day.opensAt),
+        closesAt: minutesToLocalTime(day.closesAt),
+      });
+
+      // Media franja no es una franja: sin las dos horas no hay segundo turno.
+      // Se pregunta por `number` y no por `!== null` a propósito: con el Prisma
+      // Client viejo en memoria (migrar con el dev encendido) las columnas
+      // nuevas llegan `undefined`, que pasaba el chequeo y publicaba «NaN:NaN».
+      if (typeof day.opensAt2 === 'number' && typeof day.closesAt2 === 'number') {
+        slots.push({
+          opensAt: minutesToLocalTime(day.opensAt2),
+          closesAt: minutesToLocalTime(day.closesAt2),
+        });
+      }
+    }
 
     return {
       dayOfWeek,
       label: DAY_LABELS[dayOfWeek] ?? '',
-      isClosed: day?.isClosed ?? true,
-      opensAt: minutesToLocalTime(day?.opensAt ?? 0),
-      closesAt: minutesToLocalTime(day?.closesAt ?? 0),
+      isClosed,
+      slots,
       isToday: dayOfWeek === today,
     };
   });

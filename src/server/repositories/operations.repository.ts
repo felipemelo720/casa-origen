@@ -55,7 +55,13 @@ export const businessHourRepository = {
   }),
   async upsertDay(
     dayOfWeek: number,
-    data: { isClosed: boolean; opensAt: number; closesAt: number },
+    data: {
+      isClosed: boolean;
+      opensAt: number;
+      closesAt: number;
+      opensAt2: number | null;
+      closesAt2: number | null;
+    },
   ) {
     return prisma.businessHour.upsert({
       where: { dayOfWeek },

@@ -1,6 +1,7 @@
 import { CalendarDays } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { formatShifts } from '@/lib/schedule-format';
 import type { OpenState, ScheduleDay } from '@/server/services/schedule.service';
 
 type Props = {
@@ -36,14 +37,19 @@ export function OpeningHours({ schedule, open }: Props) {
         {schedule.map((day) => (
           <div
             key={day.dayOfWeek}
-            className={cn('flex items-center justify-between py-2', day.isToday && 'font-semibold')}
+            // `gap-3`: con los dos turnos la fila llega al borde a 360px y el
+            // «hoy» quedaba pegado a la hora.
+            className={cn(
+              'flex items-baseline justify-between gap-3 py-2',
+              day.isToday && 'font-semibold',
+            )}
           >
             <dt className={cn(!day.isToday && 'text-muted-foreground')}>
               {day.label}
               {day.isToday && <span className="text-primary ml-2 text-xs">hoy</span>}
             </dt>
-            <dd className={cn(day.isClosed && 'text-muted-foreground')}>
-              {day.isClosed ? 'Cerrado' : `${day.opensAt} – ${day.closesAt}`}
+            <dd className={cn('text-right', day.isClosed && 'text-muted-foreground')}>
+              {day.isClosed ? 'Cerrado' : formatShifts(day.slots)}
             </dd>
           </div>
         ))}

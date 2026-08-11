@@ -1303,6 +1303,150 @@ cero scroll horizontal. `npm run build` con el dev apagado.
 Sin badge «Promo Dúo» en las cards del menú: quien se salta la card se entera
 recién en el carrito.
 
+### La card de la oferta, sin foto (2026-08-11)
+
+La primera versión llevaba la foto de la pizza de fondo, con velo encima. Se
+sacó: competía con lo único que el bloque tiene que comunicar, que es un
+precio. Una foto detrás del texto obliga a un velo cada vez más denso para que
+el número llegue a 4.5:1 —el queso y la masa tienen zonas casi blancas— y
+termina siendo una foto que no se ve bajo un texto que igual cuesta leer.
+
+Ahora el peso lo carga el color: `bg-primary` a fondo completo, el único bloque
+de la landing pintado con el acento entero, así que es el elemento dominante de
+la pantalla sin pelearle a nada. Las fotos de verdad —las siete pizzas— están
+en el armador, que es donde deciden algo.
+
+Dos consecuencias que hubo que resolver, las dos por contraste sobre el acento:
+
+- **`Button` gana la variante `onPrimary`** (`bg-primary-foreground` /
+  `text-primary`, con el anillo de foco invertido también). El `default` es
+  `bg-primary` y sobre un panel `bg-primary` desaparecía. Variante `cva` en
+  `button.tsx`, no un componente nuevo.
+- **El ahorro pasa de `text-success` a una píldora invertida.** El verde de
+  éxito está calibrado contra `--background`; sobre naranjo se cae. Invertir el
+  par de tokens lo mantiene legible en claro y oscuro sin introducir un color.
+
+Layout de dos columnas alineadas al centro (`sm:items-center`): la del precio es
+bastante más alta que la del título, y alinearlas por abajo dejaba el título
+hundido bajo un hueco muerto. El precio y el botón viven juntos a la derecha —
+son la misma decisión.
+
+## Los agregados se cobran por tramo, no plano (2026-08-11)
+
+**Problema.** El código cobraba un precio plano por agregado, $700 en 24 cm y
+$1.000 en 32 cm. La carta impresa cobra dos tramos:
+
+|           | 24 cm  | 32 cm  |
+| --------- | ------ | ------ |
+| Vegetales | $700   | $1.200 |
+| Premium   | $1.000 | $1.500 |
+
+O sea que el sitio cobraba $200 de menos por cada vegetal en 32 cm y $500 de
+menos por cada premium. El operador lo corregía a mano o lo perdía.
+
+**Modelo.** El precio depende de **dos** ejes y ninguno de los dos puede ser
+dueño del número solo. El tramo es una bandera en el agregado
+(`Extra.isPremium`); los dos precios cuelgan de la opción de tamaño
+(`VariantOption.extraPrice` / `extraPremiumPrice`). Modelarlo al revés —dos
+precios en el `Extra`— habría amarrado el esquema a que existan exactamente dos
+tamaños, que es lo que más cambia.
+
+`extraPremiumPrice` nulo cae a `extraPrice`: un tamaño que no separa por tramo
+cobra un solo número para todo. No es un premium gratis.
+
+**`src/lib/extra-price.ts`, puro.** Mismo criterio que `bundle-promo.ts`:
+`pricing.service` decide lo que se cobra, pero la card del producto y el carrito
+tienen que imprimir la misma cifra o el total salta en el checkout. Un archivo,
+tres consumidores.
+
+**Datos de la carta que faltaban.** Se agregó **Albahaca fresca** y el agregado
+se llama **Queso extra**, no «Extra queso». El slug quedó fijado a mano
+(`extra-queso`) en vez de derivarlo del nombre: derivarlo habría creado una fila
+nueva y jubilado la original con `order_item_extras` apuntando a ella. Y como
+`Extra.name` es único, el seed primero **desocupa el nombre**: una fila retirada
+de un seed viejo se llamaba «Queso extra» y bloqueaba el rename; se la renombra
+a «Queso extra (retirado)» en vez de borrarla, por la misma razón.
+
+**El carrito guardado mentía.** Cada línea persiste en `localStorage` una copia
+de los precios de agregado de su tamaño, y un carrito armado antes del cambio
+seguía ofreciendo agregados a $1.000 para siempre. El cobro estaba bien —
+`pricing.service` recalcula— pero la pantalla no. Ahora el layout manda
+`sizePricingByOption` (`productRepository.findSizeExtraPricing`) y el drawer
+prefiere el catálogo sobre la copia de la línea: un `localStorage` viejo se
+sana solo en el siguiente render, sin borrarle el carrito a nadie.
+
+Queda un resto: un agregado **ya enganchado** a una línea vieja conserva su
+`unitPrice` guardado hasta que se lo desmarque y vuelva a marcar. El total del
+checkout igual es el correcto.
+
+**Verificado.** 192 unitarios + 10 de integración. En la base: los 12 agregados
+con su tramo, y las dos opciones de tamaño con `700/1000` y `1200/1500`. Por
+CDP, con un snapshot viejo plantado a mano (`extraPrice: 1000`, sin premium),
+el drawer igual ofrece `$1.200` los vegetales y `$1.500` los premium.
+
+## Turno partido: el local cierra a las 15:00 y reabre a las 18:00 (2026-08-11)
+
+**Problema.** El local atiende de lunes a sábado 12:30–15:00 y 18:00–22:00,
+pero `business_hours` guardaba **una** franja por día (`opensAt`/`closesAt`,
+`dayOfWeek @unique`). La web publicaba "12:00 – 23:00": a las 16:00 el cliente
+llegaba a un local cerrado creyendo que estaba abierto.
+
+**Fase 1 (backend), lo que entró.**
+
+- Migración `business_hours_second_shift`: `opensAt2`/`closesAt2 Int?`. Dos
+  columnas anulables en vez de una tabla de turnos — el local tiene dos y una
+  tabla costaría un join en cada render de la landing.
+- `businessHoursDaySchema` valida el turno entero: apertura y cierre juntos o
+  ninguno, cierre posterior a la apertura, segundo turno solo con primero, sin
+  solaparse. La UI puede esconder los inputs; el post igual pasa por acá.
+- `ScheduleDay` gana `slots: ScheduleSlot[]` (vacío si el día está cerrado).
+  `opensAt`/`closesAt` quedan como el primer turno aplanado, marcados
+  `@deprecated`: header, footer, `OpeningHours` y el JSON-LD siguen leyendo un
+  rango y compilan igual. Se van en la fase 2.
+- Seed: lunes-sábado 12:30–15:00 / 18:00–22:00, domingo cerrado, con el bloque
+  `update` repitiendo los campos — con `update: {}` el horario nuevo no llegaba
+  a una base ya sembrada sin resetearla.
+
+**Fase 2 (UI), lo que entró.**
+
+- `admin.actions.ts`: los `name` del form pasan a `<día>_<turno>_<campo>`
+  (`formData` es plana y el día tiene dos turnos). «Cerrado» nulea los cuatro
+  campos; medio turno 2 descarta **solo ese turno** y deja el día abierto — un
+  turno partido a medio llenar no puede publicar el local cerrado toda la
+  semana.
+- `/admin`: cuatro columnas desde `lg` (Día · Turno 1 · Turno 2 · Cerrado),
+  apilado en móvil con el rótulo del turno sobre los inputs. Un día cerrado
+  precarga 12:30–15:00 y 18:00–22:00; uno abierto de turno único deja el 2 en
+  blanco, porque precargarlo le inventaría una franja al guardar.
+- `src/lib/schedule-format.ts`: `formatShifts()` → «12:30 – 15:00 y 18:00 –
+  22:00». Vive en `lib` y no en el servicio porque el header es cliente y de un
+  módulo `server-only` solo se puede importar el tipo.
+- Header (barra superior y sheet), footer y `OpeningHours` renderizan `slots`.
+  `ScheduleDay` ya no tiene `opensAt`/`closesAt`: se fueron con el último
+  consumidor.
+- JSON-LD: un `OpeningHoursSpecification` **por turno**. Declarar 12:30–22:00
+  le diría a Google que a las 16:00 estamos abiertos.
+
+**Un bug que salió en la verificación.** El admin publicaba `NaN:NaN` en el
+turno 2. Causa: migrar con el dev encendido deja el Prisma Client viejo en
+memoria y las columnas nuevas llegan `undefined`, que pasaba el guard
+`!== null`. El servicio ahora pregunta `typeof === 'number'`, con test.
+
+**Tradeoff asumido.** No se soportan turnos que crucen medianoche: el modelo
+guarda minutos del mismo día, así que un cierre a las 00:30 se leería como
+«cierra antes de abrir». Tampoco hay un tercer turno; si algún día hace falta,
+ahí sí conviene la tabla de turnos.
+
+**Sin cambio de comportamiento en el gate.** `getOpenState()` sigue mirando
+solo el switch `acceptingOrders`; el horario es lo que la tienda publica, no
+una segunda barrera.
+
+**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios, 205 unitarios en
+verde (14 nuevos entre `schedule.schema.test.ts` y `schedule.service.test.ts`).
+En la base, los 7 días con `750/900` y `1080/1320` salvo domingo. En el HTML
+servido: `/admin` con los dos turnos precargados en los siete días, la landing
+publicando «12:30 – 15:00 y 18:00 – 22:00» y el JSON-LD con dos specs por día.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros

@@ -118,17 +118,23 @@ async function seedPaymentMethods() {
 }
 
 async function seedBusinessHours() {
+  // Turno partido de lunes a sábado: 12:30–15:00 y 18:00–22:00. Domingo cerrado.
+  // `update` repite los campos a propósito: con `update: {}` el horario nuevo
+  // no llegaba a una base ya sembrada sin resetearla.
   for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) {
-    const isMonday = dayOfWeek === 1;
+    const isSunday = dayOfWeek === 0;
+    const hours = {
+      isClosed: isSunday,
+      opensAt: 12 * 60 + 30,
+      closesAt: 15 * 60,
+      opensAt2: isSunday ? null : 18 * 60,
+      closesAt2: isSunday ? null : 22 * 60,
+    };
+
     await prisma.businessHour.upsert({
       where: { dayOfWeek },
-      update: {},
-      create: {
-        dayOfWeek,
-        isClosed: isMonday,
-        opensAt: 12 * 60,
-        closesAt: dayOfWeek === 5 || dayOfWeek === 6 ? 23 * 60 + 30 : 23 * 60,
-      },
+      update: hours,
+      create: { dayOfWeek, ...hours },
     });
   }
 }

@@ -17,12 +17,13 @@ import type { CheckoutOptions } from '@/features/checkout/checkout-form';
 export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
   // Same check the checkout enforces, so the badge cannot say "abierto" while
   // `placeOrder` refuses the order.
-  const [settings, open, schedule, addOns, communes, paymentMethods, featuredBundle] =
+  const [settings, open, schedule, addOns, sizePricing, communes, paymentMethods, featuredBundle] =
     await Promise.all([
       settingsRepository.get(),
       getOpenState(),
       getWeeklySchedule(),
       productRepository.findAddOnsByProduct(),
+      productRepository.findSizeExtraPricing(),
       // Rendered by the checkout inside the drawer. Loaded here so the form is
       // complete on its first paint instead of fetching after it opens.
       communeRepository.findAllActive(),
@@ -32,6 +33,15 @@ export default async function StorefrontLayout({ children }: { children: React.R
       // from the landing that renders the promo card.
       promotionRepository.findFeaturedBundle(),
     ]);
+
+  // Keyed by option id so the drawer can price an add-on from the catalogue
+  // instead of from the copy the cart line saved when it was created.
+  const sizePricingByOption = Object.fromEntries(
+    sizePricing.map((option) => [
+      option.id,
+      { extraPrice: option.extraPrice, extraPremiumPrice: option.extraPremiumPrice },
+    ]),
+  );
 
   // Keyed by product so the drawer can look up a line's add-ons in one hop.
   // Narrowed here: `CartDrawer` is a client component and these are Prisma rows.
@@ -94,6 +104,7 @@ export default async function StorefrontLayout({ children }: { children: React.R
       />
       <CartDrawerMount
         addOnsByProduct={addOnsByProduct}
+        sizePricingByOption={sizePricingByOption}
         checkoutOptions={checkoutOptions}
         bundleRule={toBundleRule(featuredBundle)}
       />
