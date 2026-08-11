@@ -108,7 +108,7 @@ export function ProductCard({ product }: { product: ProductDetail }) {
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       className="group border-border bg-card relative flex flex-col overflow-hidden rounded-2xl border"
     >
-      <div className="bg-muted relative aspect-[4/3] overflow-hidden">
+      <div className="bg-muted relative aspect-square overflow-hidden">
         {product.image ? (
           <Image
             src={product.image}
