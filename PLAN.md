@@ -1447,6 +1447,51 @@ En la base, los 7 días con `750/900` y `1080/1320` salvo domingo. En el HTML
 servido: `/admin` con los dos turnos precargados en los siete días, la landing
 publicando «12:30 – 15:00 y 18:00 – 22:00» y el JSON-LD con dos specs por día.
 
+## La grilla de horarios rompía el ancho de todo `/admin` (2026-08-12)
+
+**Problema.** La UI del turno partido entró como una grilla de cuatro columnas
+(Día · Turno 1 · Turno 2 · Cerrado). Su `min-content` es 344px, contra 328px de
+ancho útil a 360px. Como las secciones del panel comparten los tracks del grid
+de la página, ese único hijo ancho estiraba el track y **todas** las secciones
+se comían el margen derecho: scroll horizontal en `/admin` completo, no solo en
+Horarios.
+
+Encima la sección medía 1779px de alto —cuatro filas apiladas por día—, el
+turno 2 mostraba `--:-- --` en seis de siete días, y un día cerrado seguía
+mostrando horas cargadas, así que se leía abierto.
+
+**Lo que entró.**
+
+- `[&>section]:min-w-0` en el contenedor del grid. Un grid item nace con
+  `min-width: auto`: el track crece hasta el `min-content` del hijo más ancho.
+  Ese es el mecanismo, y aplica a cualquier sección futura del panel.
+- `src/features/admin/schedule-day-row.tsx`: el día pasa a ser una tarjeta, de
+  a dos por fila desde `lg`. «Cerrado» sube a la línea del nombre (es lo que
+  más se toca y era la cuarta fila).
+- El segundo turno solo se renderiza si el día lo tiene; si no, un botón
+  «Segundo turno» que precarga 18:00–22:00 **al agregarlo**, nunca al pintar la
+  fila. Esto reemplaza la precarga de la fase 2 anterior: precargarlo siempre
+  le inventaba una franja a un día de turno único al guardar.
+- Un día cerrado **apaga** sus inputs en vez de mostrar horas cargadas. Los
+  campos no se desmontan, y la casilla sigue siendo lo único que decide: la
+  action ya es fail-closed ante horas ausentes (sin `opensAt`/`closesAt`, día
+  cerrado), así que un input deshabilitado —que no viaja en `formData`— llega
+  al mismo lugar.
+- `ShiftFields` usa `grid-cols-[1fr_auto_1fr]` y no flex: con el navegador en
+  inglés el input de hora muestra «12:30 PM» más el ícono y su `min-content`
+  se va a ~140px. La grilla iguala las dos horas en vez de dejar que una empuje
+  a la otra.
+
+**Tradeoff asumido.** La fila es client component: agregar y quitar el segundo
+turno es estado real. La frontera termina en la fila —el resto de la sección y
+la página siguen siendo server components—, y `/admin` ya es
+`dynamic = 'force-dynamic'`, así que no toca el costo de la landing.
+
+**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios, 205 tests en
+verde. Sin tests nuevos: el cambio es de layout y de estado de UI; el contrato
+con la action (los `name` de los campos) no se movió, y los tests existentes de
+`admin.itest.ts` lo cubren.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros
