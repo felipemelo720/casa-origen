@@ -19,6 +19,7 @@ import { analyticsRepository } from '@/server/repositories/analytics.repository'
 import { getWeeklySchedule } from '@/server/services/schedule.service';
 import { AdminForm, AdminSubmit } from '@/features/admin/admin-form';
 import { ScheduleDayRow } from '@/features/admin/schedule-day-row';
+import { ZoneRow } from '@/features/admin/zone-row';
 import { StatCard } from '@/features/admin/stat-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -347,7 +348,7 @@ export default async function AdminPage() {
         </section>
 
         {/* Delivery zones */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-span-2 lg:col-start-2 lg:row-start-3">
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-4 sm:p-6 lg:col-span-2 lg:col-start-2 lg:row-start-3">
           <div>
             <p className="text-muted-foreground text-xs tracking-widest uppercase">
               Zonas de despacho
@@ -359,9 +360,10 @@ export default async function AdminPage() {
           </div>
 
           <AdminForm action={updateCommunesAction} className="space-y-2">
-            {/* Igual que en horarios: la cabecera solo desde `lg`, porque en
-                móvil los inputs se envuelven y los rótulos dejarían de caer
-                sobre su columna. */}
+            {/* Cabecera solo desde `lg`: en móvil cada campo lleva su propio
+                rótulo dentro de la tarjeta (ver `ZoneRow`), porque los inputs
+                se acomodan en dos filas y estos títulos no caerían sobre su
+                columna. */}
             <div className="text-muted-foreground/70 hidden grid-cols-[1fr_22rem] items-center gap-3 text-[10px] tracking-widest uppercase lg:grid">
               <span>Sector</span>
               <div className="flex min-w-0 items-center gap-x-2">
@@ -376,51 +378,15 @@ export default async function AdminPage() {
             </div>
 
             {zones.map((zone) => (
-              <div
+              <ZoneRow
                 key={zone.id}
-                className="border-border/60 grid items-center gap-1 border-t pt-2 lg:grid-cols-[1fr_22rem] lg:gap-3"
-              >
-                {/* `zoneId` viaja aparte: una casilla sin marcar no aparece en
-                    el `FormData`, así que sin esta lista no habría forma de
-                    saber que la zona existe para apagarla. */}
-                <input type="hidden" name="zoneId" value={zone.id} />
-                <span className="text-sm font-medium">{zone.name}</span>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <Input
-                    name={`${zone.id}_min`}
-                    inputMode="numeric"
-                    defaultValue={formatMoney(zone.deliveryFeeMin)}
-                    aria-label={`${zone.name}: despacho mínimo`}
-                    className="h-11 min-w-0 flex-1"
-                  />
-                  <span className="text-muted-foreground shrink-0" aria-hidden="true">
-                    –
-                  </span>
-                  <Input
-                    name={`${zone.id}_max`}
-                    inputMode="numeric"
-                    defaultValue={formatMoney(zone.deliveryFeeMax)}
-                    aria-label={`${zone.name}: despacho máximo`}
-                    className="h-11 min-w-0 flex-1"
-                  />
-                  <Input
-                    name={`${zone.id}_minutes`}
-                    inputMode="numeric"
-                    defaultValue={String(zone.extraMinutes)}
-                    aria-label={`${zone.name}: minutos extra`}
-                    className="h-11 w-16 shrink-0"
-                  />
-                  <label className="text-muted-foreground flex h-11 shrink-0 cursor-pointer items-center gap-1.5 px-1 text-sm lg:w-[5.5rem]">
-                    <input
-                      type="checkbox"
-                      name={`${zone.id}_active`}
-                      defaultChecked={zone.isActive}
-                      className="accent-primary focus-visible:ring-ring/50 size-4 rounded-[4px] focus-visible:ring-[3px] focus-visible:outline-none"
-                    />
-                    Activa
-                  </label>
-                </div>
-              </div>
+                id={zone.id}
+                name={zone.name}
+                deliveryFeeMin={zone.deliveryFeeMin}
+                deliveryFeeMax={zone.deliveryFeeMax}
+                extraMinutes={zone.extraMinutes}
+                isActive={zone.isActive}
+              />
             ))}
 
             <AdminSubmit className="h-11 w-full">Guardar zonas</AdminSubmit>

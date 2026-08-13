@@ -1492,6 +1492,43 @@ verde. Sin tests nuevos: el cambio es de layout y de estado de UI; el contrato
 con la action (los `name` de los campos) no se movió, y los tests existentes de
 `admin.itest.ts` lo cubren.
 
+## Zonas de despacho: tres cajas sin rótulo en el teléfono (2026-08-13)
+
+**Problema.** La fila de zona metía mínimo, máximo, minutos extra y la casilla
+«Activa» en un solo `flex-wrap`, con la cabecera de rótulos oculta bajo `lg`.
+En móvil el operador veía tres cajas numéricas idénticas —solo con
+`aria-label`, que no se ve— y tenía que deducir cuál era cuál. Corregir el
+precio de un sector desde el celular era adivinar.
+
+**Lo que entró** (`src/features/admin/zone-row.tsx`).
+
+- Cada campo lleva su rótulo encima en móvil (`Mínimo` / `Máximo` /
+  `Min. extra`), oculto desde `lg` porque ahí lo pone la cabecera de columna.
+- `grid-cols-2` en vez de `flex-wrap`: montos en una fila, minutos y «Activa»
+  en la siguiente. El orden deja de depender del ancho sobrante.
+- Tarjeta por zona, con borde punteado cuando está apagada.
+- Sufijo `min` dentro del campo de minutos. Sin prefijo `$` en los montos:
+  `formatMoney` ya lo trae en el valor y quedaba duplicado.
+
+**Sigue siendo server component.** El estado apagado se pinta con
+`has-[input[type=checkbox]:not(:checked)]:` sobre el contenedor, sin JS. A
+diferencia de `ScheduleDayRow`, acá no hay estado real que justifique cruzar la
+frontera cliente.
+
+**Los inputs de una zona apagada quedan habilitados a propósito.** La action
+hace `parseMoney(formData.get(…) ?? '')` y `parseMoney('')` es `0`: un campo
+deshabilitado no viaja en `FormData` y la zona se guardaría con despacho **$0**.
+Es la diferencia con Horarios, donde el fail-closed ante horas ausentes sí era
+lo buscado. Acá «apagado» es color, nunca ausencia de dato.
+
+**Desktop sin cambios**: `lg:grid-cols-[1fr_22rem]`, fila única y cabecera de
+columnas quedan igual.
+
+**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios, 205 tests en verde.
+**No verificado en navegador**: no hay Chromium en la máquina y `/admin` pide
+password, así que los anchos salen de leer el CSS, no de medirlos. Falta la
+pasada real a 360px.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros
