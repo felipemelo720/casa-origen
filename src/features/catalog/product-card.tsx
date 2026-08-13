@@ -2,7 +2,6 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { ChevronDown, Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -107,14 +106,20 @@ export function ProductCard({ product }: { product: ProductDetail }) {
     setExtrasOpen(false);
   }
 
+  /*
+   * La entrada es CSS (`animate-fade-up`, el mismo token que usa el hero) y no
+   * framer-motion.
+   *
+   * Con `motion.article` + `initial={{ opacity: 0 }}` el servidor mandaba la
+   * card con `style="opacity:0"` y lo único que la volvía visible era
+   * framer-motion hidratando y un `IntersectionObserver` disparando. Cuando eso
+   * no pasaba, la carta entera —el camino de conversión— quedaba transparente
+   * sobre una página que se veía sana. Un `@keyframes` no depende de que corra
+   * JS, y con `prefers-reduced-motion` la regla global de `globals.css` lo
+   * colapsa a 0.01ms, que deja la card visible igual.
+   */
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 12 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-40px' }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className="group border-border bg-card relative flex flex-col overflow-hidden rounded-2xl border"
-    >
+    <article className="group border-border bg-card animate-fade-up relative flex flex-col overflow-hidden rounded-2xl border">
       <div className="bg-muted relative aspect-square overflow-hidden">
         {product.image ? (
           <Image
@@ -279,6 +284,6 @@ export function ProductCard({ product }: { product: ProductDetail }) {
           </Button>
         </div>
       </div>
-    </motion.article>
+    </article>
   );
 }
