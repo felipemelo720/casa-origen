@@ -538,11 +538,19 @@ const CATALOGUE: CategorySeed[] = [
     icon: 'CupSoda',
     products: [
       {
-        name: 'Coca-Cola Zero',
+        name: 'Coca-Cola',
         shortDescription: 'Lata 350 cc',
         description: 'Lata de 350 cc, bien fría.',
         price: 1200,
         // Nothing to cook: it comes out of the fridge with the pizza.
+        prepMinutes: 0,
+        image: '/menu/coca-cola.jpg',
+      },
+      {
+        name: 'Coca-Cola Zero',
+        shortDescription: 'Lata 350 cc',
+        description: 'Lata de 350 cc, bien fría.',
+        price: 1200,
         prepMinutes: 0,
         image: '/menu/coca-cola-zero.jpg',
       },
