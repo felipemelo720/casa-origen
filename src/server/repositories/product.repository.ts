@@ -28,6 +28,12 @@ export type ProductDetail = Prisma.ProductGetPayload<{
 /** How many products the landing strip shows. The admin list warns past this. */
 export const HIGHLIGHTED_LIMIT = 4;
 
+/**
+ * The combo the landing advertises in its own card. Pinned by slug because the
+ * card is a fixed piece of the page, not a curated list: there is exactly one.
+ */
+export const COMBO_PROMO_SLUG = 'combo-individual';
+
 export const productRepository = {
   /** Full menu for the single-page storefront: active + visible, with variants for inline size selection. */
   async findAllForMenu(): Promise<ProductDetail[]> {
@@ -66,6 +72,21 @@ export const productRepository = {
     });
     if (featured.length > 0) return featured;
     return productRepository.findTopSellers(limit);
+  },
+
+  /**
+   * The combo behind the landing's promo card.
+   *
+   * Deliberately does **not** filter on `isVisible`: the combo is kept out of
+   * the carta grid on purpose (a price with no size next to the pizzas reads
+   * like a cheaper pizza), and its card is the only place it is sold from.
+   * `isActive` is still required — that is the flag that retires a product.
+   */
+  async findComboPromo(slug: string = COMBO_PROMO_SLUG): Promise<ProductDetail | null> {
+    return prisma.product.findFirst({
+      where: { slug, isActive: true },
+      include: productDetailInclude,
+    });
   },
 
   /**

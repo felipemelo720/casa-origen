@@ -417,6 +417,186 @@ describe('priceCart — bundle promotions', () => {
   });
 });
 
+describe('priceCart — combo product', () => {
+  /**
+   * Combo Individual: a hidden product sold at a flat `offerPrice`, with one
+   * required group per decision and every delta at zero.
+   *
+   * The point of these tests is that the combo is priced by the ordinary
+   * product path and owes nothing to the promotion engine — no `BUNDLE_PRICE`,
+   * no promotion slot, no `break` to compete for.
+   */
+  function comboProduct(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'combo-individual',
+      name: 'Combo Individual',
+      price: 7200,
+      offerPrice: 7000,
+      isActive: true,
+      availability: 'AVAILABLE' as const,
+      categoryId: 'cat-promos',
+      variantGroups: [
+        {
+          id: 'group-pizza',
+          name: 'Elige tu pizza',
+          isRequired: true,
+          minSelect: 1,
+          maxSelect: 1,
+          options: [
+            {
+              id: 'opt-napolitana',
+              name: 'Napolitana',
+              priceDelta: 0,
+              extraPrice: null,
+              extraPremiumPrice: null,
+              isAvailable: true,
+            },
+            {
+              id: 'opt-rustica',
+              name: 'Rústica',
+              priceDelta: 0,
+              extraPrice: null,
+              extraPremiumPrice: null,
+              isAvailable: true,
+            },
+          ],
+        },
+        {
+          id: 'group-drink',
+          name: 'Elige tu bebida',
+          isRequired: true,
+          minSelect: 1,
+          maxSelect: 1,
+          options: [
+            {
+              id: 'opt-coca',
+              name: 'Coca-Cola',
+              priceDelta: 0,
+              extraPrice: null,
+              extraPremiumPrice: null,
+              isAvailable: true,
+            },
+          ],
+        },
+      ],
+      extras: [],
+      ...overrides,
+    };
+  }
+
+  function comboItem(overrides: Partial<CartItemInput> = {}): CartItemInput {
+    return baseItem({
+      productId: 'combo-individual',
+      selectedVariantOptionIds: ['opt-napolitana', 'opt-coca'],
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    findForPricing.mockResolvedValue(comboProduct() as never);
+  });
+
+  it('charges the offer price and not the list price', async () => {
+    const result = await priceCart({ items: [comboItem()], orderType: 'PICKUP' });
+
+    expect(result.items[0]?.unitPrice).toBe(7000);
+    expect(result.total).toBe(7000);
+  });
+
+  it('charges the same for every allowed combination', async () => {
+    const result = await priceCart({
+      items: [comboItem({ selectedVariantOptionIds: ['opt-rustica', 'opt-coca'] })],
+      orderType: 'PICKUP',
+    });
+
+    expect(result.total).toBe(7000);
+  });
+
+  it('rejects a combo missing one of its required decisions', async () => {
+    // The sheet keeps the button disabled until both groups are resolved, but
+    // hiding it in the UI is not validating it: a hand-made payload with only
+    // the pizza has to bounce server-side.
+    // Anclado al motivo y no sólo al tipo: `BusinessRuleError` también sale por
+    // pedido mínimo y por producto inactivo, así que un `toThrow` pelado pasaría
+    // aunque el combo se rechazara por la razón equivocada.
+    await expect(
+      priceCart({
+        items: [comboItem({ selectedVariantOptionIds: ['opt-napolitana'] })],
+        orderType: 'PICKUP',
+      }),
+    ).rejects.toThrow(/Completa la selección/i);
+  });
+
+  it('rejects a flavour that is not on the combo', async () => {
+    // The allow-list is the option rows themselves, so asking for a pizza the
+    // combo does not carry is not a cheap Mechada — it is an error.
+    await expect(
+      priceCart({
+        items: [comboItem({ selectedVariantOptionIds: ['opt-mechada', 'opt-coca'] })],
+        orderType: 'PICKUP',
+      }),
+    ).rejects.toThrow(/Una de las opciones/i);
+  });
+
+  it('multiplies by quantity', async () => {
+    const result = await priceCart({ items: [comboItem({ quantity: 3 })], orderType: 'PICKUP' });
+
+    expect(result.total).toBe(21000);
+  });
+
+  it('does not consume the promotion slot', async () => {
+    // The whole reason the combo is a product: a cart holding it can still take
+    // an unrelated promotion, because it never entered the `break` loop as one.
+    findActivePromotions.mockResolvedValue([
+      {
+        id: 'promo-flat',
+        name: 'Descuento plano',
+        scope: 'ALL',
+        minSubtotal: 0,
+        discountType: 'FIXED',
+        value: 500,
+        bundleSize: 0,
+        bundleVariantName: null,
+        maxDiscount: null,
+        categories: [],
+        products: [],
+      },
+    ] as never);
+
+    const result = await priceCart({ items: [comboItem()], orderType: 'PICKUP' });
+
+    expect(result.promotionId).toBe('promo-flat');
+    expect(result.promotionDiscount).toBe(500);
+    expect(result.total).toBe(6500);
+  });
+
+  it('is invisible to the Promo Dúo bundle rule', async () => {
+    // Its options are named "Napolitana" and "Coca-Cola", never "32 cm", so the
+    // bundle matcher cannot pair two combos into a dúo and discount them twice.
+    findActivePromotions.mockResolvedValue([
+      {
+        id: 'promo-duo',
+        name: 'Promo Dúo',
+        scope: 'ALL',
+        minSubtotal: 0,
+        discountType: 'BUNDLE_PRICE',
+        value: 17990,
+        bundleSize: 2,
+        bundleVariantName: '32 cm',
+        maxDiscount: null,
+        categories: [],
+        products: [],
+      },
+    ] as never);
+
+    const result = await priceCart({ items: [comboItem({ quantity: 2 })], orderType: 'PICKUP' });
+
+    expect(result.promotionDiscount).toBe(0);
+    expect(result.promotionId).toBeNull();
+    expect(result.total).toBe(14000);
+  });
+});
+
 describe('priceCart — delivery', () => {
   it('requires a commune for delivery orders', async () => {
     await expect(priceCart({ items: [baseItem()], orderType: 'DELIVERY' })).rejects.toThrow(

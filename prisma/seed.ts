@@ -383,6 +383,12 @@ type ProductSeed = {
   offerPrice?: number;
   prepMinutes: number;
   isFeatured?: boolean;
+  /**
+   * `false` deja el producto vivo y comprable pero fuera de la carta. Lo usa el
+   * Combo Individual: su superficie es la card de promo, no una tarjeta más en
+   * la grilla, pero sigue siendo la fila que `pricing.service` cotiza.
+   */
+  isVisible?: boolean;
   image: string;
   tags?: string[];
   ingredients?: string[];
@@ -432,58 +438,6 @@ const pizzaSizes = (deltaTo32: number) => ({
 });
 
 const CATALOGUE: CategorySeed[] = [
-  {
-    // Primera de la carta a propósito: es el gancho de entrada y ocupa una sola
-    // card, así que adelantarla no aleja el menú de pizzas.
-    name: 'Promos',
-    description: 'Combos armados, precio cerrado',
-    icon: 'Tag',
-    products: [
-      {
-        // Modelado como producto y no como `Promotion` a propósito. El motor de
-        // promociones cobra un descuento sobre el carrito y es homogéneo:
-        // `bundle-promo.ts` exige que toda unidad del bundle comparta el mismo
-        // `VariantOption.name`, y una pizza y una bebida no comparten ninguno.
-        // Además `pricing.service` aplica una sola promoción por pedido
-        // (`break`), así que un combo-promoción se comería el slot de la Promo
-        // Dúo. Como producto con dos grupos requeridos el precio sale del
-        // camino normal (base + deltas), convive con la Dúo en el mismo
-        // carrito y el operador lo edita desde /admin sin migración.
-        name: 'Combo Individual',
-        shortDescription: 'Pizza de 24 cm + bebida en lata 350 cc',
-        description:
-          'Elige una de nuestras pizzas de 24 cm seleccionadas y una bebida en lata de 350 cc. Precio cerrado, sin sorpresas.',
-        // `price` es la suma de comprar las dos cosas por separado ($6.000 +
-        // $1.200): es el ancla que la card tacha. `offerPrice` es lo que se
-        // cobra. Si mañana sube la Napolitana, este par no se entera solo — el
-        // precio del combo es fijo por diseño.
-        price: 7200,
-        offerPrice: 7000,
-        prepMinutes: 20,
-        isFeatured: true,
-        image: '/menu/napolitana.jpg',
-        // Sin extras: el combo se vende a precio cerrado, y habilitarlos abriría
-        // la puerta a cobrar toppings sobre una base ya descontada.
-        variants: [
-          {
-            name: 'Elige tu pizza',
-            options: [
-              { name: 'Napolitana', priceDelta: 0, isDefault: true },
-              { name: 'Rústica', priceDelta: 0 },
-              { name: 'La Huerta', priceDelta: 0 },
-            ],
-          },
-          {
-            name: 'Elige tu bebida',
-            options: [
-              { name: 'Coca-Cola', priceDelta: 0, isDefault: true },
-              { name: 'Coca-Cola Zero', priceDelta: 0 },
-            ],
-          },
-        ],
-      },
-    ],
-  },
   {
     name: 'Pizzas',
     description: 'Masa artesanal, horneadas al momento',
@@ -608,6 +562,63 @@ const CATALOGUE: CategorySeed[] = [
       },
     ],
   },
+  {
+    // Última y con su único producto `isVisible: false`: la categoría existe
+    // para colgar el combo de algún lado, no para salir en la carta. Sin
+    // productos visibles el menú no la pinta, así que la grilla sigue siendo
+    // Pizzas y Bebidas.
+    name: 'Promos',
+    description: 'Combos armados, precio cerrado',
+    icon: 'Tag',
+    products: [
+      {
+        // Producto y no `Promotion`, a propósito. El motor de promociones cobra
+        // un descuento sobre el carrito y es homogéneo: `bundle-promo.ts` exige
+        // que toda unidad del bundle comparta el mismo `VariantOption.name`, y
+        // una pizza y una bebida no comparten ninguno. Además `pricing.service`
+        // aplica una sola promoción por pedido (`break`), así que un
+        // combo-promoción se comería el slot de la Promo Dúo cuando los dos
+        // caen en el mismo carrito.
+        //
+        // Como producto con dos grupos requeridos el precio sale del camino que
+        // ya existe (`offerPrice ?? price` + deltas) sin tocar el motor, y la
+        // card de la landing es sólo su superficie.
+        name: 'Combo Individual',
+        shortDescription: 'Pizza de 24 cm + bebida en lata 350 cc',
+        description:
+          'Elige una de nuestras pizzas de 24 cm seleccionadas y una bebida en lata de 350 cc. Precio cerrado, sin sorpresas.',
+        // `price` es lo que costaría suelto ($6.000 + $1.200) y existe sólo como
+        // ancla tachada; `offerPrice` es lo que se cobra. El par queda
+        // congelado: si sube la Napolitana, el combo no se entera.
+        price: 7200,
+        offerPrice: 7000,
+        prepMinutes: 20,
+        // Fuera de la carta: se vende desde la card de promo, no como una
+        // tarjeta más entre las pizzas, donde un precio sin tamaño confunde.
+        isVisible: false,
+        image: '/menu/napolitana.jpg',
+        // Sin extras: es un precio cerrado, y habilitarlos dejaría cobrar
+        // toppings sobre una base ya descontada.
+        variants: [
+          {
+            name: 'Elige tu pizza',
+            options: [
+              { name: 'Napolitana', priceDelta: 0, isDefault: true },
+              { name: 'Rústica', priceDelta: 0 },
+              { name: 'La Huerta', priceDelta: 0 },
+            ],
+          },
+          {
+            name: 'Elige tu bebida',
+            options: [
+              { name: 'Coca-Cola', priceDelta: 0, isDefault: true },
+              { name: 'Coca-Cola Zero', priceDelta: 0 },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 async function upsertProduct(product: ProductSeed, categoryId: string, sortOrder: number) {
@@ -630,7 +641,7 @@ async function upsertProduct(product: ProductSeed, categoryId: string, sortOrder
       categoryId,
       sortOrder,
       isActive: true,
-      isVisible: true,
+      isVisible: product.isVisible ?? true,
       image: product.image,
     },
     create: {
@@ -642,6 +653,7 @@ async function upsertProduct(product: ProductSeed, categoryId: string, sortOrder
       offerPrice: product.offerPrice ?? null,
       prepMinutes: product.prepMinutes,
       isFeatured: product.isFeatured ?? false,
+      isVisible: product.isVisible ?? true,
       image: product.image,
       categoryId,
       sortOrder,

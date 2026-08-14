@@ -3,6 +3,8 @@ import type { Metadata } from 'next';
 import { ClosedNotice } from '@/components/shared/closed-notice';
 import { ProductCard } from '@/features/catalog/product-card';
 import { DeliveryChecker } from '@/features/delivery/delivery-checker';
+import { ComboPromoCard } from '@/features/promo/combo-promo-card';
+import { buildComboPromoView } from '@/features/promo/combo-promo-view';
 import { DuoPromoCard } from '@/features/promo/duo-promo-card';
 import { buildDuoPromoView } from '@/features/promo/duo-promo-view';
 import { EventOrders } from '@/features/storefront/event-orders';
@@ -32,25 +34,42 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [settings, heroBanners, products, highlighted, zones, open, schedule, featuredBundle] =
-    await Promise.all([
-      settingsRepository.get(),
-      bannerRepository.findActiveByPlacement('HERO'),
-      productRepository.findAllForMenu(),
-      productRepository.findHighlighted(HIGHLIGHTED_LIMIT),
-      communeRepository.findAllActive(),
-      // The same check the checkout enforces, so the landing cannot invite an
-      // order that `placeOrder` will refuse a few clicks later.
-      getOpenState(),
-      getWeeklySchedule(),
-      promotionRepository.findFeaturedBundle(),
-    ]);
+  const [
+    settings,
+    heroBanners,
+    products,
+    highlighted,
+    zones,
+    open,
+    schedule,
+    featuredBundle,
+    comboProduct,
+  ] = await Promise.all([
+    settingsRepository.get(),
+    bannerRepository.findActiveByPlacement('HERO'),
+    productRepository.findAllForMenu(),
+    productRepository.findHighlighted(HIGHLIGHTED_LIMIT),
+    communeRepository.findAllActive(),
+    // The same check the checkout enforces, so the landing cannot invite an
+    // order that `placeOrder` will refuse a few clicks later.
+    getOpenState(),
+    getWeeklySchedule(),
+    promotionRepository.findFeaturedBundle(),
+    // Its own query and not part of `findAllForMenu`: the combo is deliberately
+    // `isVisible: false`, so the menu pass cannot see it.
+    productRepository.findComboPromo(),
+  ]);
 
   const hero = heroBanners[0];
 
   // Built from the menu already fetched, so the builder can never offer a pizza
   // the carta below is not showing.
   const duoPromo = buildDuoPromoView(featuredBundle, products);
+
+  // Same reason: the combo's choices are named after catalogue products, so the
+  // picker borrows their photos and their availability from the menu already
+  // fetched instead of asking again.
+  const comboPromo = buildComboPromoView(comboProduct, products);
 
   // Grouped on the server so the menu stays one pass over the products already
   // fetched, in `sortOrder` order, with no extra query per category.
@@ -99,6 +118,10 @@ export default async function HomePage() {
       />
 
       {duoPromo && <DuoPromoCard promo={duoPromo} openState={open} />}
+
+      {/* Debajo del dúo: es la oferta más chica de las dos, y la que baja más
+          el precio de un pedido completo va primero. */}
+      {comboPromo && <ComboPromoCard promo={comboPromo} openState={open} />}
 
       {highlighted.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-8">

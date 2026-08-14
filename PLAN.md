@@ -1558,46 +1558,78 @@ Tres bloqueos, todos del modelo y no de configuración:
    es `findFirst({ isFeatured: true })`: un segundo builder destacado se ignora
    sin avisar.
 
-**Decisión.** El combo no es un descuento sobre un carrito, es un ítem de menú
-con precio propio y dos elecciones adentro. Eso ya lo expresa `Product` +
-`variantGroups`, así que se modeló como producto:
+**Decisión.** El combo no es un descuento sobre un carrito: es un ítem con
+precio propio y dos elecciones adentro, que es justo lo que `Product` +
+`variantGroups` ya expresa. Se modeló como producto **fuera de la carta**, y su
+superficie es una card de promo con la misma estética que la Dúo.
 
-- Categoría **Promos** (`sortOrder` 0, delante de Pizzas), un solo producto.
-- `Combo Individual`, `price 7200` / `offerPrice 7000`. El `price` es la suma
-  suelta ($6.000 + $1.200) y existe solo como ancla tachada.
+- Categoría **Promos**, última (`sortOrder` 2) y con su único producto
+  `isVisible: false`. Sin productos visibles el menú no la pinta, así que la
+  grilla sigue siendo Pizzas y Bebidas.
+- `Combo Individual`, `price 7200` / `offerPrice 7000`. El `price` es lo que
+  costaría suelto ($6.000 + $1.200) y existe solo como ancla tachada.
 - Dos grupos requeridos (`minSelect`/`maxSelect` 1): _Elige tu pizza_
   (Napolitana, Rústica, La Huerta) y _Elige tu bebida_ (Coca-Cola, Zero), todos
   con `priceDelta: 0`.
 
-Toca `prisma/seed.ts` y nada más: cero cambios en `pricing.service`,
-`bundle-promo.ts` o el schema. El precio sale del camino existente
-(`pricing.service.ts:74`, `offerPrice ?? price` + deltas), y la restricción a
-esas tres pizzas vive en las opciones del grupo, que se validan server-side.
-Al no ser `Promotion` no compite por el `break` ni por `isFeatured`: convive con
-la Promo Dúo en el mismo carrito. Y al no ser categoría `pizzas` queda fuera del
-`scope` de la Dúo, que sigue aplicando solo sobre pizzas de 32 cm.
+**Por qué no se ve en la grilla.** Un precio sin tamaño al lado de las pizzas se
+lee como una pizza más barata. `productRepository.findComboPromo()` lo trae por
+slug sin filtrar `isVisible` — `isActive` sigue siendo el flag que lo retira.
 
-`seedCatalogue` ahora repite **`sortOrder` en el `update`** de categoría: sin
-eso una categoría nueva no puede colarse delante de las que ya existen, porque
-el `create` es el único que lo escribía. Es seguro porque no hay pantalla de
-admin que cure el orden de categorías — a diferencia de `isFeatured` en
-productos, que sigue deliberadamente fuera del `update`.
+**Capas nuevas.** `combo-promo-view.ts` (view model puro, testeable),
+`combo-promo-card.tsx` (server), `combo-promo-cta.tsx` (cliente, `dynamic`) y
+`combo-builder.tsx` (sheet). Mismo reparto que la Dúo: solo el botón es cliente
+y el armador se descarga recién cuando alguien lo toca, así que el JS de la
+landing no se movió (12.2 kB / 218 kB).
+
+El picker toma foto, descripción y disponibilidad de los productos del menú que
+el home ya trajo, emparejando **por nombre de opción**. Si una pizza se apaga en
+`/admin`, su tarjeta en el combo aparece «No disponible»; si se apaga un grupo
+entero, `buildComboPromoView` devuelve `null` y la card no se pinta, en vez de
+abrir un armador sin salida.
+
+Cero cambios en `pricing.service`, `bundle-promo.ts` o el schema: el precio sale
+del camino existente (`pricing.service.ts:74`, `offerPrice ?? price` + deltas) y
+la restricción a esas tres pizzas vive en las opciones del grupo, que se validan
+server-side. Al no ser `Promotion` no compite por el `break` ni por
+`isFeatured`, y al no ser categoría `pizzas` queda fuera del `scope` de la Dúo.
+
+`seedCatalogue` ahora repite **`sortOrder` en el `update`** de categoría: el
+`create` era el único que lo escribía. Es seguro porque no hay pantalla de admin
+que cure el orden de categorías — a diferencia de `isFeatured` en productos, que
+sigue deliberadamente fuera del `update`. `ProductSeed` gana `isVisible`.
 
 **Sin extras en el combo**: habilitarlos dejaría cobrar toppings sobre una base
 ya descontada.
 
-**Tradeoff.** El precio del combo queda congelado: si sube la Napolitana, el
+**Tradeoff 1.** El precio del combo queda congelado: si sube la Napolitana, el
 combo no se entera. Es el costo de no tocar el motor de precios.
+
+**Tradeoff 2, pedido explícitamente.** Las dos cards van con el acento completo
+(`bg-primary`), una debajo de la otra. Son dos elementos dominantes seguidos y
+el acento deja de significar «esto es _la_ oferta». La Dúo va primera porque baja
+más el precio de un pedido completo.
 
 **Advertido y asumido.** Con la carta de hoy el combo ahorra **$200** (6.000 +
 1.200 = 7.200). La Promo Dúo ahorra $2.010. Queda pendiente decidir si baja el
 precio del combo, si entra una bebida de 350 cc a precio propio, o si se
 comunica como conveniencia y no como ahorro.
 
-**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios, 205 tests en verde,
-build y despliegue a 3006 con el combo renderizando ($7.000 sobre $7.200
-tachado). **No verificado en navegador**: no hay Chromium en la máquina, así que
-falta la pasada real a 360px sobre la card nueva.
+**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios, **227 tests en
+verde** (22 nuevos: 15 sobre `buildComboPromoView`/`comboTotal` y 7 sobre
+`priceCart` con el combo). Build y despliegue a 3006 con las dos cards
+renderizando, el combo a $7.000 sobre $7.200 tachado y la carta mostrando solo
+Pizzas y Bebidas.
+
+Los dos tests de rechazo están anclados al **motivo** y no al tipo de error:
+`BusinessRuleError` también sale por pedido mínimo y por producto inactivo, así
+que un `toThrow(BusinessRuleError)` pelado habría pasado aunque el combo se
+rechazara por la razón equivocada. Se verificaron los mensajes reales
+(`Completa la selección…` para un grupo sin resolver, `Una de las opciones…`
+para un sabor ajeno al combo) antes de fijarlos.
+
+**No verificado en navegador**: no hay Chromium en la máquina, así que falta la
+pasada real a 360px sobre la card y el sheet nuevos.
 
 ## Infraestructura dev
 
