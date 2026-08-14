@@ -3,6 +3,25 @@ import 'server-only';
 import { prisma } from '@/lib/db/prisma';
 import type { Prisma } from '@prisma/client';
 
+/**
+ * Lo que el armador de la promo necesita, ni más ni menos. Compartido entre la
+ * card de la landing y la página propia de la promo para que las dos rutas no
+ * puedan traer campos distintos y renderizar precios distintos.
+ */
+const bundleSelect = {
+  id: true,
+  slug: true,
+  name: true,
+  description: true,
+  value: true,
+  scope: true,
+  bundleSize: true,
+  bundleVariantName: true,
+  bundleSizeLabel: true,
+  image: true,
+  products: { select: { productId: true } },
+} satisfies Prisma.PromotionSelect;
+
 export const promotionRepository = {
   /** Currently active promotions, cheapest query needed by the pricing engine. */
   async findActive() {
@@ -37,18 +56,27 @@ export const promotionRepository = {
         OR: [{ endsAt: null }, { endsAt: { gte: now } }],
       },
       orderBy: { priority: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        value: true,
-        scope: true,
-        bundleSize: true,
-        bundleVariantName: true,
-        bundleSizeLabel: true,
-        image: true,
-        products: { select: { productId: true } },
+      select: bundleSelect,
+    });
+  },
+  /**
+   * La misma promoción, pedida por slug para su página propia.
+   *
+   * No exige `isFeatured`: destacada es lo que decide si la landing pinta la
+   * card, no si la promo existe. Sí exige vigencia — una página que sigue
+   * ofreciendo un precio vencido es exactamente lo que el checkout rechaza.
+   */
+  async findBundleBySlug(slug: string) {
+    const now = new Date();
+    return prisma.promotion.findFirst({
+      where: {
+        slug,
+        isActive: true,
+        discountType: 'BUNDLE_PRICE',
+        startsAt: { lte: now },
+        OR: [{ endsAt: null }, { endsAt: { gte: now } }],
       },
+      select: bundleSelect,
     });
   },
   async findAllForAdmin() {

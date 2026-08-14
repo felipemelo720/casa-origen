@@ -1697,10 +1697,78 @@ server y la regla `@supports` + `animation-timeline: view()` presente en el CSS
 compilado. Falta la pasada visual a 360px y el chequeo de que ninguna sección
 quede a media opacidad.
 
+## Ficha de producto y página de promo (2026-08-14)
+
+**Problema.** La carta era una grilla de tarjetas y nada más. No había dónde
+mandar a alguien: un cliente que pregunta «¿qué trae la Mechada?» por WhatsApp
+solo podía recibir el link de la portada, y Google no tenía ninguna página que
+posicionar por «pizza mechada Paine». La tarjeta tampoco tiene espacio para
+ingredientes, foto grande ni las objeciones de compra.
+
+**Rutas nuevas.** Rompen el «tres páginas» del pivote, igual que `/cuenta`:
+
+| Ruta               | Qué                                                         |
+| ------------------ | ----------------------------------------------------------- |
+| `/producto/[slug]` | ficha con galería, panel de compra, JSON-LD y relacionados  |
+| `/promo/[slug]`    | la misma promo de la landing, con URL propia para compartir |
+
+Las dos con `revalidate = 60` y `generateStaticParams`: la carta es chica y
+fija, así que se prerenderizan al build y la primera visita sale de HTML
+estático en vez de pagar una consulta.
+
+**`src/features/catalog/product-path.ts`.** Los prefijos `/producto` y `/promo`
+en un solo lugar. Los enlazan la tarjeta (cliente), el JSON-LD, el sitemap y las
+dos cards de oferta (server); con el string repetido, renombrar el segmento deja
+la mitad de los links en un 404 que nadie mira porque la landing sigue
+viéndose sana.
+
+**`ProductCard` dejó de recibir la fila de Prisma entera.** Ahora toma
+`ProductView` (`product-view.ts`, puro y con tests) armado por `toProductView`.
+Era el pendiente que arrastraba el flujo de carga de `/`: la card es client
+component, así que cada producto se serializaba completo al payload RSC. La
+tarjeta además se volvió enlazable — foto y título van dentro de un `Link`, y
+el botón pasó a «Elegir opciones».
+
+**`findAllSlugs` no filtra `isVisible`, el sitemap sí.** El combo vive fuera de
+la carta pero tiene página propia para poder venderse desde su card; anunciarlo
+al crawler lo pondría a competir con la carta misma, así que su `metadata` va
+`robots: noindex` (`producto/[slug]/page.tsx:67`) y el sitemap lo saltea.
+`isActive` sigue siendo el flag que retira un producto, y un producto retirado
+**404**, no muestra una ficha que el checkout va a rechazar.
+
+**`bundleSelect` compartido** en `promotion.repository.ts`: `findFeaturedBundle`
+(landing) y `findBundleBySlug` (página propia) leen el mismo `select`, así las
+dos rutas no pueden traer campos distintos y renderizar precios distintos.
+`findBundleBySlug` no exige `isFeatured` —destacada decide si la landing pinta
+la card, no si la promo existe— pero sí vigencia: una página que sigue
+ofreciendo un precio vencido es exactamente lo que el checkout rechaza.
+
+**Tradeoffs.**
+
+- El sitemap pasó de sincrónico y sin DB a `async` con dos queries. Sin
+  `revalidate` propio se congela al build: un producto nuevo no aparece hasta
+  el siguiente deploy.
+- Dos superficies de compra (`ProductCard` y `ProductBuyPanel`) comparten
+  `use-product-selection.ts`, pero las dos calculan `basePrice + priceDelta`
+  inline en vez de delegar en `product-view.ts`. Es un espejo más del precio
+  sin test propio; anotado para el refactor de precios.
+
+**Verificado.** `tsc`, `lint`, `format:check` limpios y 245 tests en verde (12
+nuevos sobre `toProductView`/`priceRange`). En producción, `GET /` y
+`GET /producto/pepperoni` devuelven 200.
+
+**No verificado en navegador**: no hay Chromium en la máquina. Falta la pasada a
+360px sobre la ficha, la galería y el panel de compra.
+
 ## Infraestructura dev
 
-Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros
-proyectos). `npm run dev` / `build` / `npx prisma studio` funcionan.
+Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.
+No hay Docker ni contenedor `co-pg` (el puerto 5435 quedó de una etapa
+anterior). Tampoco hay `.env`: los secretos viven en `.env.production`, que
+Next lee por su cuenta y el CLI de Prisma **no** — de ahí que `migrate deploy`
+necesite `DATABASE_URL` explícito.
+
+`npm run dev` / `build` / `npx prisma studio` funcionan.
 
 **Desactualizado (visto 2026-08-14)**: en esta máquina no hay binario `docker`
 y el 5435 está cerrado. La DB que usa producción es un Postgres nativo en

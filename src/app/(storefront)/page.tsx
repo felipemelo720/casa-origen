@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 
 import { ClosedNotice } from '@/components/shared/closed-notice';
 import { ProductCard } from '@/features/catalog/product-card';
+import { productPath, promoPath } from '@/features/catalog/product-path';
+import { toProductView } from '@/features/catalog/product-view';
 import { DeliveryChecker } from '@/features/delivery/delivery-checker';
 import { ComboPromoCard } from '@/features/promo/combo-promo-card';
 import { buildComboPromoView } from '@/features/promo/combo-promo-view';
@@ -117,19 +119,38 @@ export default async function HomePage() {
         }
       />
 
-      {duoPromo && <DuoPromoCard promo={duoPromo} openState={open} />}
+      {duoPromo && featuredBundle && (
+        <DuoPromoCard
+          promo={duoPromo}
+          openState={open}
+          detailHref={promoPath(featuredBundle.slug)}
+        />
+      )}
 
       {/* Debajo del dúo: es la oferta más chica de las dos, y la que baja más
           el precio de un pedido completo va primero. */}
-      {comboPromo && <ComboPromoCard promo={comboPromo} openState={open} />}
+      {comboPromo && comboProduct && (
+        <ComboPromoCard
+          promo={comboPromo}
+          openState={open}
+          detailHref={productPath(comboProduct.slug)}
+        />
+      )}
 
       {highlighted.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-8">
-          <h2 className="font-display mb-1 text-2xl font-bold">Los más pedidos</h2>
-          <p className="text-muted-foreground mb-6 text-sm">Lo que más sale de nuestro horno.</p>
+          {/* La entrada va en el encabezado y en cada card por separado: si
+              envolviera la sección entera, el grid animaría como un bloque y
+              el escalonado por fila se perdería. */}
+          <h2 className="font-display reveal mb-1 text-2xl font-bold">Los más pedidos</h2>
+          <p className="text-muted-foreground reveal mb-6 text-sm">
+            Lo que más sale de nuestro horno.
+          </p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {highlighted.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              // Recortado acá: `ProductCard` es client component y la fila de
+              // Prisma entera viaja al payload RSC producto por producto.
+              <ProductCard key={product.id} product={toProductView(product)} />
             ))}
           </div>
         </section>
@@ -137,7 +158,10 @@ export default async function HomePage() {
 
       {/* Above the menu on purpose: coverage, fee and minimum are what decide
           whether building a cart is worth it at all. */}
-      <section id="cobertura" className="mx-auto max-w-3xl scroll-mt-28 px-4 pt-12 sm:px-6 lg:px-8">
+      <section
+        id="cobertura"
+        className="reveal mx-auto max-w-3xl scroll-mt-28 px-4 pt-12 sm:px-6 lg:px-8"
+      >
         <DeliveryChecker
           // Narrowed here rather than passed whole: `DeliveryChecker` is a
           // client component and these are Prisma rows.
@@ -176,10 +200,10 @@ export default async function HomePage() {
             pizzas. */}
         {menuByCategory.map(({ category, items }) => (
           <div key={category.id} className="mb-10 last:mb-0">
-            <h2 className="font-display mb-6 text-2xl font-bold">{category.name}</h2>
+            <h2 className="font-display reveal mb-6 text-2xl font-bold">{category.name}</h2>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {items.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={toProductView(product)} />
               ))}
             </div>
           </div>
@@ -196,7 +220,10 @@ export default async function HomePage() {
 
       <HowToOrder whatsappEnabled={Boolean(settings.whatsapp)} />
 
-      <section id="horarios" className="mx-auto max-w-3xl scroll-mt-28 px-4 py-16 sm:px-6 lg:px-8">
+      <section
+        id="horarios"
+        className="reveal mx-auto max-w-3xl scroll-mt-28 px-4 py-16 sm:px-6 lg:px-8"
+      >
         <OpeningHours schedule={schedule} open={open} />
       </section>
     </div>

@@ -90,6 +90,52 @@ export const productRepository = {
   },
 
   /**
+   * One product for its own page.
+   *
+   * Same reasoning as `findComboPromo`: `isVisible` is not filtered. A product
+   * kept out of the carta grid (the combo) still has a page it can be shared
+   * and sold from; `isActive` remains the flag that retires it, and a retired
+   * product must 404 rather than take an order the checkout would refuse.
+   */
+  async findBySlug(slug: string): Promise<ProductDetail | null> {
+    return prisma.product.findFirst({
+      where: { slug, isActive: true },
+      include: productDetailInclude,
+    });
+  },
+
+  /**
+   * Sibling products for the "también te puede gustar" strip on a product page.
+   * Visible only: this one is a suggestion, not a link the customer asked for,
+   * and pointing at something the carta does not list would be a dead end.
+   */
+  async findRelated(
+    categoryId: string,
+    excludeId: string,
+    limit: number,
+  ): Promise<ProductDetail[]> {
+    return prisma.product.findMany({
+      where: { isActive: true, isVisible: true, categoryId, id: { not: excludeId } },
+      include: productDetailInclude,
+      orderBy: [{ isFeatured: 'desc' }, { soldCount: 'desc' }, { sortOrder: 'asc' }],
+      take: limit,
+    });
+  },
+
+  /**
+   * Slugs for `generateStaticParams` and the sitemap. Includes the invisible
+   * ones for the same reason `findBySlug` does — their page exists — but the
+   * sitemap is what decides which of them get advertised to a crawler.
+   */
+  async findAllSlugs() {
+    return prisma.product.findMany({
+      where: { isActive: true },
+      select: { slug: true, isVisible: true, updatedAt: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+  },
+
+  /**
    * Add-ons per product, for the cart drawer: the cart only stores the picked
    * ids, so adding one later needs the catalogue that the product card had.
    */

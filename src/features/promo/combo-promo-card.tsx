@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { ComboPromoCta } from '@/features/promo/combo-promo-cta';
 import type { ComboPromoView } from '@/features/promo/combo-promo-view';
 import { formatMoney } from '@/lib/money';
@@ -20,15 +22,18 @@ import type { OpenState } from '@/server/services/schedule.service';
 export function ComboPromoCard({
   promo,
   openState,
+  detailHref,
 }: {
   promo: ComboPromoView;
   openState: OpenState;
+  /** Ficha del producto que hay detrás del combo. */
+  detailHref?: string;
 }) {
   const savings = Math.max(0, promo.regularPrice - promo.price);
 
   return (
     <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
-      <div className="bg-primary text-primary-foreground rounded-2xl px-5 py-6 sm:px-8 sm:py-8">
+      <div className="bg-primary text-primary-foreground reveal rounded-2xl px-5 py-6 sm:px-8 sm:py-8">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between sm:gap-10">
           {/* ---- Qué es ---- */}
           <div className="min-w-0">
@@ -69,6 +74,17 @@ export function ComboPromoCard({
             </div>
 
             <p className="mt-3 text-xs opacity-80">Envíos y retiros · Elige sabor y bebida</p>
+
+            {detailHref && (
+              <p className="mt-2">
+                <Link
+                  href={detailHref}
+                  className="text-xs underline underline-offset-4 opacity-90 hover:opacity-100"
+                >
+                  Ver qué trae
+                </Link>
+              </p>
+            )}
           </div>
         </div>
       </div>

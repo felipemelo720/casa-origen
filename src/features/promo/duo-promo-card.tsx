@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { DuoPromoCta } from '@/features/promo/duo-promo-cta';
 import type { DuoPromoView } from '@/features/promo/duo-promo-view';
 import { formatMoney } from '@/lib/money';
@@ -22,12 +24,22 @@ import type { OpenState } from '@/server/services/schedule.service';
  * Server component: sólo el botón es cliente, y el armador se descarga recién
  * cuando alguien lo toca.
  */
-export function DuoPromoCard({ promo, openState }: { promo: DuoPromoView; openState: OpenState }) {
+export function DuoPromoCard({
+  promo,
+  openState,
+  detailHref,
+}: {
+  promo: DuoPromoView;
+  openState: OpenState;
+  /** Ficha propia de la promo. La landing lo pasa; la ficha misma no, para no
+   *  enlazarse a sí misma. */
+  detailHref?: string;
+}) {
   const savings = Math.max(0, promo.regularFrom - promo.bundlePrice);
 
   return (
     <section className="mx-auto max-w-7xl px-4 pt-12 sm:px-6 lg:px-8">
-      <div className="bg-primary text-primary-foreground rounded-2xl px-5 py-6 sm:px-8 sm:py-8">
+      <div className="bg-primary text-primary-foreground reveal rounded-2xl px-5 py-6 sm:px-8 sm:py-8">
         {/* `items-center` y no `items-end`: la columna del precio es bastante
             más alta que la del título, y alinearlas por abajo dejaba el título
             hundido con un hueco muerto arriba. */}
@@ -78,6 +90,17 @@ export function DuoPromoCard({ promo, openState }: { promo: DuoPromoView; openSt
             </div>
 
             <p className="mt-3 text-xs opacity-80">Envíos y retiros · Elige tus dos sabores</p>
+
+            {detailHref && (
+              <p className="mt-2">
+                <Link
+                  href={detailHref}
+                  className="text-xs underline underline-offset-4 opacity-90 hover:opacity-100"
+                >
+                  Ver cómo funciona
+                </Link>
+              </p>
+            )}
           </div>
         </div>
       </div>
