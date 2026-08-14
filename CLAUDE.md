@@ -44,8 +44,12 @@ Código, comandos y errores exactos, verbatim.
 
 ## Infra dev
 
-- Postgres en Docker, contenedor `co-pg`, puerto **5435** (5432-5434 los usan
-  otros proyectos). Usuario y DB: `casaorigen`.
+- Postgres **nativo** en el CT, `127.0.0.1:5432`. Usuario y DB: `casaorigen`.
+  No hay Docker instalado; el contenedor `co-pg` en 5435 quedó de una etapa
+  anterior y ya no existe.
+- **No hay `.env`.** Los secretos viven en `.env.production`, que Next lee por
+  su cuenta y el CLI de Prisma **no**: `migrate deploy` y `db seed` necesitan
+  `DATABASE_URL` explícito delante del comando.
 - Dev server: 3000–3006 están ocupados por otros proyectos y por el propio
   Casa Origen en producción. Levantar dev con puerto explícito:
   `npm run dev -- -p 3010`. Sin `-p`, Next va probando hacia arriba y el
@@ -54,7 +58,8 @@ Código, comandos y errores exactos, verbatim.
   `npm start -- -p 3006`, cwd `/var/www/casa-origen`. Es lo que se ve en
   `http://10.10.10.12:3006`. Un cambio en el código **no aparece** ahí hasta
   rebuild + restart.
-- `psql` directo: `docker exec co-pg psql -U casaorigen -d casaorigen -c "..."`
+- `psql` directo (no hay `sudo` en el CT, se corre como root):
+  `su postgres -c "psql -d casaorigen -c '...'"`
 
 ## Comandos
 
