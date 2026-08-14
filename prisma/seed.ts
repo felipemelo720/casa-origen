@@ -597,15 +597,35 @@ const CATALOGUE: CategorySeed[] = [
         // tarjeta más entre las pizzas, donde un precio sin tamaño confunde.
         isVisible: false,
         image: '/menu/napolitana.jpg',
-        // Sin extras: es un precio cerrado, y habilitarlos dejaría cobrar
-        // toppings sobre una base ya descontada.
+        // Mismos agregados que cualquier pizza, y cobrados igual. Las opciones
+        // de sabor llevan los precios de 24 cm porque eso es lo que el combo
+        // trae: `pricing.service` resuelve el precio del agregado desde la
+        // opción elegida, así que sin esto un tocino caería al `price` de
+        // catálogo del extra en vez del tramo que corresponde.
+        extras: PIZZA_EXTRAS,
         variants: [
           {
             name: 'Elige tu pizza',
             options: [
-              { name: 'Napolitana', priceDelta: 0, isDefault: true },
-              { name: 'Rústica', priceDelta: 0 },
-              { name: 'La Huerta', priceDelta: 0 },
+              {
+                name: 'Napolitana',
+                priceDelta: 0,
+                extraPrice: EXTRA_PRICE_24,
+                extraPremiumPrice: EXTRA_PREMIUM_PRICE_24,
+                isDefault: true,
+              },
+              {
+                name: 'Rústica',
+                priceDelta: 0,
+                extraPrice: EXTRA_PRICE_24,
+                extraPremiumPrice: EXTRA_PREMIUM_PRICE_24,
+              },
+              {
+                name: 'La Huerta',
+                priceDelta: 0,
+                extraPrice: EXTRA_PRICE_24,
+                extraPremiumPrice: EXTRA_PREMIUM_PRICE_24,
+              },
             ],
           },
           {

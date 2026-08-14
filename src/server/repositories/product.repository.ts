@@ -97,7 +97,12 @@ export const productRepository = {
     return prisma.productExtra.findMany({
       where: {
         extra: { isActive: true },
-        product: { isActive: true, isVisible: true },
+        // `isActive` y no `isVisible`: desde que el combo se vende desde su
+        // card estando fuera de la carta, invisible dejó de significar
+        // invendible. Un producto que llegó al carrito puede sumar agregados
+        // sin importar si aparece o no en la grilla; el flag que retira un
+        // producto sigue siendo `isActive`.
+        product: { isActive: true },
       },
       orderBy: { sortOrder: 'asc' },
       select: {

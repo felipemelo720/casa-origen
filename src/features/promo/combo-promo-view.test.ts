@@ -31,14 +31,37 @@ function combo(
         id: 'group-pizza',
         name: 'Elige tu pizza',
         options: [
-          { id: 'opt-napolitana', name: 'Napolitana', priceDelta: 0, isAvailable: true },
-          { id: 'opt-rustica', name: 'Rústica', priceDelta: 0, isAvailable: true },
+          {
+            id: 'opt-napolitana',
+            name: 'Napolitana',
+            priceDelta: 0,
+            extraPrice: 700,
+            extraPremiumPrice: 1000,
+            isAvailable: true,
+          },
+          {
+            id: 'opt-rustica',
+            name: 'Rústica',
+            priceDelta: 0,
+            extraPrice: 700,
+            extraPremiumPrice: 1000,
+            isAvailable: true,
+          },
         ],
       },
       {
         id: 'group-drink',
         name: 'Elige tu bebida',
-        options: [{ id: 'opt-coca', name: 'Coca-Cola', priceDelta: 0, isAvailable: true }],
+        options: [
+          {
+            id: 'opt-coca',
+            name: 'Coca-Cola',
+            priceDelta: 0,
+            extraPrice: null,
+            extraPremiumPrice: null,
+            isAvailable: true,
+          },
+        ],
       },
     ],
   } as unknown as ProductDetail;
@@ -117,6 +140,26 @@ describe('buildComboPromoView', () => {
     // a reason to hide a pizza the combo does include.
     expect(napolitana?.image).toBeNull();
     expect(napolitana?.available).toBe(true);
+  });
+
+  it('carries the add-on tiers of the flavour into the view', () => {
+    // El builder los copia a la línea del carrito: sin esto el drawer no sabe
+    // a cuánto cotizar un tocino sobre un combo y cae al precio de catálogo.
+    const view = buildComboPromoView(combo(), MENU);
+    const napolitana = view?.groups[0]?.choices[0];
+
+    expect(napolitana?.extraPrice).toBe(700);
+    expect(napolitana?.extraPremiumPrice).toBe(1000);
+  });
+
+  it('leaves the drink without add-on tiers', () => {
+    // Si la bebida tarifara toppings competiría con el sabor por decidir el
+    // tramo, y `pricing.service` se queda con la última opción que los trae.
+    const view = buildComboPromoView(combo(), MENU);
+    const coca = view?.groups[1]?.choices[0];
+
+    expect(coca?.extraPrice).toBeNull();
+    expect(coca?.extraPremiumPrice).toBeNull();
   });
 
   it('marks a choice unavailable when the catalogue product is sold out', () => {

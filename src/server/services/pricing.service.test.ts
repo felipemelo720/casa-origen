@@ -442,21 +442,23 @@ describe('priceCart — combo product', () => {
           isRequired: true,
           minSelect: 1,
           maxSelect: 1,
+          // Precios de agregado de 24 cm: es el tamaño que el combo trae, y de
+          // acá los saca `pricing.service` para cobrar un topping.
           options: [
             {
               id: 'opt-napolitana',
               name: 'Napolitana',
               priceDelta: 0,
-              extraPrice: null,
-              extraPremiumPrice: null,
+              extraPrice: 700,
+              extraPremiumPrice: 1000,
               isAvailable: true,
             },
             {
               id: 'opt-rustica',
               name: 'Rústica',
               priceDelta: 0,
-              extraPrice: null,
-              extraPremiumPrice: null,
+              extraPrice: 700,
+              extraPremiumPrice: 1000,
               isAvailable: true,
             },
           ],
@@ -467,6 +469,8 @@ describe('priceCart — combo product', () => {
           isRequired: true,
           minSelect: 1,
           maxSelect: 1,
+          // Una bebida no tarifa toppings: sin `extraPrice`, para que el grupo
+          // de sabor siga siendo el que manda.
           options: [
             {
               id: 'opt-coca',
@@ -479,7 +483,32 @@ describe('priceCart — combo product', () => {
           ],
         },
       ],
-      extras: [],
+      extras: [
+        {
+          extraId: 'extra-cheese',
+          priceOverride: null,
+          maxQuantity: 3,
+          extra: {
+            id: 'extra-cheese',
+            name: 'Queso extra',
+            price: 1500,
+            isActive: true,
+            isPremium: true,
+          },
+        },
+        {
+          extraId: 'extra-olive',
+          priceOverride: null,
+          maxQuantity: 3,
+          extra: {
+            id: 'extra-olive',
+            name: 'Aceituna',
+            price: 700,
+            isActive: true,
+            isPremium: false,
+          },
+        },
+      ],
       ...overrides,
     };
   }
@@ -568,6 +597,51 @@ describe('priceCart — combo product', () => {
     expect(result.promotionId).toBe('promo-flat');
     expect(result.promotionDiscount).toBe(500);
     expect(result.total).toBe(6500);
+  });
+
+  it('charges an add-on at the 24 cm tier, not at the extra catalogue price', async () => {
+    // `Queso extra` cuesta 1500 suelto en el catálogo, pero el combo es una
+    // pizza de 24 cm y ahí el premium vale 1000. Si el grupo de sabor perdiera
+    // sus `extraPrice`, `resolveExtraPrice` caería al catálogo y el cliente
+    // pagaría 500 de más por el mismo queso.
+    const result = await priceCart({
+      items: [comboItem({ selectedExtras: [{ extraId: 'extra-cheese', quantity: 1 }] })],
+      orderType: 'PICKUP',
+    });
+
+    expect(result.items[0]?.extras[0]?.unitPrice).toBe(1000);
+    expect(result.total).toBe(8000);
+  });
+
+  it('charges a standard add-on at the 24 cm standard tier', async () => {
+    const result = await priceCart({
+      items: [comboItem({ selectedExtras: [{ extraId: 'extra-olive', quantity: 1 }] })],
+      orderType: 'PICKUP',
+    });
+
+    expect(result.items[0]?.extras[0]?.unitPrice).toBe(700);
+    expect(result.total).toBe(7700);
+  });
+
+  it('multiplies add-ons by the combo quantity', async () => {
+    const result = await priceCart({
+      items: [
+        comboItem({ quantity: 2, selectedExtras: [{ extraId: 'extra-olive', quantity: 1 }] }),
+      ],
+      orderType: 'PICKUP',
+    });
+
+    // (7000 + 700) × 2
+    expect(result.total).toBe(15400);
+  });
+
+  it('rejects an add-on the combo does not carry', async () => {
+    await expect(
+      priceCart({
+        items: [comboItem({ selectedExtras: [{ extraId: 'extra-unknown', quantity: 1 }] })],
+        orderType: 'PICKUP',
+      }),
+    ).rejects.toThrow(/extras seleccionados/i);
   });
 
   it('is invisible to the Promo Dúo bundle rule', async () => {

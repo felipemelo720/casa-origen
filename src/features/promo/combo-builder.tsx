@@ -74,8 +74,10 @@ export function ComboBuilder({
           optionId: choice?.optionId ?? '',
           optionName: choice?.name ?? '',
           priceDelta: choice?.priceDelta ?? 0,
-          extraPrice: null,
-          extraPremiumPrice: null,
+          // Viajan al carrito para que el drawer pueda cotizar un agregado
+          // sobre esta línea. Es el mismo snapshot que guarda una pizza suelta.
+          extraPrice: choice?.extraPrice ?? null,
+          extraPremiumPrice: choice?.extraPremiumPrice ?? null,
         };
       }),
       extras: [],

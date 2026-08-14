@@ -1599,8 +1599,20 @@ server-side. Al no ser `Promotion` no compite por el `break` ni por
 que cure el orden de categorías — a diferencia de `isFeatured` en productos, que
 sigue deliberadamente fuera del `update`. `ProductSeed` gana `isVisible`.
 
-**Sin extras en el combo**: habilitarlos dejaría cobrar toppings sobre una base
-ya descontada.
+**Agregados habilitados** (cambio sobre la primera versión, que no los tenía por
+miedo a cobrar toppings sobre una base ya descontada). El miedo no se sostiene:
+las opciones de sabor llevan `extraPrice`/`extraPremiumPrice` de **24 cm**
+($700 / $1.000), que es exactamente lo que paga una pizza de 24 suelta. Sin
+esos campos `resolveExtraPrice` caía al `price` de catálogo del extra y un
+Queso extra costaba $1.500 en vez de $1.000 — el combo salía _más caro_ que la
+pizza suelta. Las opciones de bebida quedan sin tramo a propósito:
+`pricing.service` se queda con la última opción que lo trae, y una bebida no
+tarifa toppings.
+
+`findAddOnsByProduct` pasó de `{ isActive: true, isVisible: true }` a
+`{ isActive: true }`. Desde que el combo se vende desde su card estando fuera de
+la carta, **invisible dejó de significar invendible**, y con el filtro viejo la
+línea del combo era la única del carrito sin «+ Agregar algo».
 
 **Tradeoff 1.** El precio del combo queda congelado: si sube la Napolitana, el
 combo no se entera. Es el costo de no tocar el motor de precios.
@@ -1615,11 +1627,16 @@ más el precio de un pedido completo.
 precio del combo, si entra una bebida de 350 cc a precio propio, o si se
 comunica como conveniencia y no como ahorro.
 
-**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios, **227 tests en
-verde** (22 nuevos: 15 sobre `buildComboPromoView`/`comboTotal` y 7 sobre
+**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios, **233 tests en
+verde** (28 nuevos: 17 sobre `buildComboPromoView`/`comboTotal` y 11 sobre
 `priceCart` con el combo). Build y despliegue a 3006 con las dos cards
 renderizando, el combo a $7.000 sobre $7.200 tachado y la carta mostrando solo
 Pizzas y Bebidas.
+
+Los agregados se verificaron en el payload servido, no sólo en test:
+`addOnsByProduct` trae la clave del combo con sus 12 extras, y los ids de sus
+opciones de sabor están en `sizePricingByOption`, que es lo que el drawer
+necesita para cotizar el tramo de 24 cm.
 
 Los dos tests de rechazo están anclados al **motivo** y no al tipo de error:
 `BusinessRuleError` también sale por pedido mínimo y por producto inactivo, así

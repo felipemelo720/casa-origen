@@ -12,6 +12,14 @@ export type ComboPromoChoice = {
    */
   image: string | null;
   shortDescription: string | null;
+  /**
+   * Add-on prices this choice implies, carried into the cart line so the drawer
+   * can quote a tocino without another round trip. Only the flavour group sets
+   * them — a drink prices no toppings — and the drawer prefers the live
+   * catalogue over this snapshot anyway.
+   */
+  extraPrice: number | null;
+  extraPremiumPrice: number | null;
   available: boolean;
 };
 
@@ -70,6 +78,8 @@ export function buildComboPromoView(
         priceDelta: option.priceDelta,
         image: source?.image ?? null,
         shortDescription: source?.shortDescription ?? null,
+        extraPrice: option.extraPrice,
+        extraPremiumPrice: option.extraPremiumPrice,
         // Sold out upstream means sold out here: the combo cannot hand out a
         // pizza the kitchen has switched off, even though the option row
         // itself knows nothing about it.
