@@ -1813,10 +1813,12 @@ Capas tocadas: UI (`hero.tsx`), view model (`product-view.ts`), page.
 
 - **Fuera el kicker.** `page.tsx` ya no le pasa `settings.tagline` al hero; la
   tagline sigue viva en el footer, que es donde no compite con el título.
-- **Píldora «Abierto ahora»** cuando el local recibe pedidos, con los mismos
-  tokens que el badge del header y `opening-hours` (`bg-success/15` +
-  `text-foreground`, punto `bg-success`). Cerrado sigue mostrando
-  `ClosedNotice`, sin duplicar la señal.
+- **Nada de estado en positivo.** Se probó una píldora «Abierto ahora» en el
+  panel y salió en el mismo día: el badge del header ya lo dice, y en vivo
+  (poll a `/api/open-state`), mientras que en el hero quedaba congelado hasta el
+  próximo `revalidate = 60`. Dos señales del mismo estado, una más lenta, y la
+  lenta es la que va a mentir primero. El caso **cerrado** sí se repite acá,
+  porque bloquea el pedido.
 - **«Pizzas desde $5.500»** bajo el subtítulo. Sale de `entryPrice()` nuevo en
   `product-view.ts` sobre la **primera categoría de la carta**, no sobre el menú
   entero: lo más barato del catálogo es una bebida de $1.200, y anunciar eso
@@ -1845,18 +1847,17 @@ Capas tocadas: UI (`hero.tsx`), view model (`product-view.ts`), page.
 
 **Tradeoffs asumidos.**
 
-- La píldora «Abierto ahora» hereda el desfase de `revalidate = 60`, igual que
-  el aviso de cerrado que ya estaba. Ahora el desfase también puede mentir en
-  positivo por hasta un minuto; el badge vivo del header y el rechazo de
-  `placeOrder` siguen siendo la verdad.
+- El hero no confirma que el local esté abierto: hay que mirar el badge del
+  header. A cambio, ninguna parte de la portada afirma en positivo un estado que
+  puede estar hasta un minuto viejo.
 - El «desde» depende del orden de las categorías (`sortOrder`): si mañana las
   bebidas quedan primeras, el hero anuncia $1.200. Es dato del admin, no código.
 
-**Verificado.** `tsc --noEmit`, `lint` y los 15 tests de `product-view` en
-verde. Render real comprobado en una **copia del repo** corriendo `next dev` en
-3010 desde `/tmp` con `node_modules` symlinkeado: el HTML del server trae
-«Abierto ahora», «Pizzas desde $5.500», el `h1` sin la tagline encima y los dos
-CTA.
+**Verificado.** `tsc --noEmit`, `lint`, `prettier` y los 15 tests de
+`product-view` en verde. Desplegado a producción (3006) y comprobado sobre el
+HTML que sirve pm2: «Pizzas desde $5.500», el `h1` sin la tagline encima, panel
+`bg-card`, cero `animate-fade-up`, la única «Abierto ahora» de la página es la
+de `opening-hours`, y los 18 chunks de `_next/static` responden 200.
 
 **Incidente.** El primer intento levantó `next dev` en `/var/www/casa-origen` y
 le pisó `.next/static` a producción: 3006 seguía devolviendo 200 en el HTML pero
