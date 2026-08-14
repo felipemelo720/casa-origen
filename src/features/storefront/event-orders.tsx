@@ -52,7 +52,10 @@ export function EventOrders({ restaurantName, whatsapp, phone }: Props) {
     // Sin `pt`: el menú de arriba ya cierra con `py-16` y sumar otro daba
     // ~128px de vacío entre la carta y esta tarjeta. El `pb` sí hace falta,
     // porque abajo empieza la banda de «Cómo pedir» y la tarjeta la tocaba.
-    <section id="eventos" className="mx-auto max-w-5xl scroll-mt-28 px-4 pb-16 sm:px-6 lg:px-8">
+    <section
+      id="eventos"
+      className="reveal mx-auto max-w-5xl scroll-mt-28 px-4 pb-16 sm:px-6 lg:px-8"
+    >
       <div className="border-border bg-card rounded-2xl border p-6 sm:p-8 lg:p-10">
         {/* Dos columnas desde `lg`: con una sola, el texto corto dejaba la
             tarjeta medio vacía y el CTA colgando en el aire. */}

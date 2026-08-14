@@ -273,4 +273,44 @@
     background-size: 200% 100%;
     animation: var(--animate-shimmer);
   }
+
+  /*
+   * Entrada al entrar en el viewport, sin una línea de JS: la animación la
+   * conduce la posición del elemento en el scroll (`animation-timeline:
+   * view()`), no un IntersectionObserver hidratado.
+   *
+   * Reemplaza el uso viejo de `animate-fade-up` en listas: ese corría en
+   * cuanto el elemento se pintaba, así que las 20 cards de la carta animaban
+   * a la vez al cargar, casi todas fuera de pantalla. Para cuando alguien
+   * scrolleaba, ya había terminado: costo de animación, cero efecto.
+   *
+   * Todo vive dentro de `@supports`. Donde no hay `view()` (Firefox hoy) la
+   * regla entera no existe, así que el elemento nunca llega a `opacity: 0` y
+   * la degradación es "sin animación", nunca "sin contenido" — el bug que ya
+   * se pagó con framer-motion y la carta transparente.
+   *
+   * `animation-duration` se deja en su valor inicial (`auto`) a propósito: con
+   * una timeline de scroll es lo que hace que el progreso lo marque el
+   * viewport. Escribirlo con el atajo `animation:` lo pondría en `0s` y no
+   * animaría nada.
+   */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .reveal {
+        animation-name: fade-up;
+        animation-fill-mode: both;
+        animation-timing-function: linear;
+        animation-timeline: view();
+        /*
+         * Rango anclado a `entry`, no a `cover`. `cover` mide el recorrido
+         * completo del elemento por el viewport, y la última sección de la
+         * página nunca lo recorre entero: el scroll se termina antes, así que
+         * quedaría congelada a media opacidad para siempre. `entry` cierra en
+         * cuanto el elemento terminó de asomar, cosa que sí pasa incluso al
+         * final del documento.
+         */
+        animation-range: entry 5% entry 60%;
+      }
+    }
+  }
 }

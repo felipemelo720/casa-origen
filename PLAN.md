@@ -1648,10 +1648,63 @@ para un sabor ajeno al combo) antes de fijarlos.
 **No verificado en navegador**: no hay Chromium en la máquina, así que falta la
 pasada real a 360px sobre la card y el sheet nuevos.
 
+## Entrada de secciones al scrollear (2026-08-14)
+
+Pedido: que la página tenga efectos al cargar. Hipótesis: la landing es una
+columna larga y plana; sin ninguna señal de movimiento, el visitante que
+scrollea no percibe que cada bloque es una unidad, y las tres secciones que
+responden objeciones (trust bar, cobertura, horarios) pasan como texto de
+relleno.
+
+Capas tocadas: solo CSS + `className`. Cero JS nuevo, ningún componente pasó a
+cliente.
+
+- Utilidad `.reveal` en `globals.css`, con `animation-timeline: view()`. La
+  animación la conduce la posición del elemento en el scroll, no un
+  `IntersectionObserver` hidratado: **cero bytes de JS**.
+- Aplicada a: items de la trust bar, las dos cards de promo, encabezados de
+  "Los más pedidos" y de cada categoría, cada `ProductCard`, cobertura,
+  eventos, cómo pedir y horarios.
+- **`animate-fade-up` salió de `ProductCard`.** Ahí no hacía nada visible:
+  disparaba al pintar, así que las ~20 cards de la carta animaban a la vez al
+  cargar, casi todas fuera de pantalla, y llegaban quietas al scroll. Costo de
+  animación, cero efecto. El escalonado ahora lo da la posición real de cada
+  card, sin `animation-delay` por índice.
+- **El hero no se tocó.** Su `animate-fade-up` al cargar sigue igual y no se
+  reintrodujo el escalonado por elemento que ya se había sacado por retrasar
+  el LCP.
+- Todo vive dentro de `@supports (animation-timeline: view())`. Donde no hay
+  soporte (Firefox hoy) la regla no existe y nada llega a `opacity: 0`: la
+  degradación es "sin animación", nunca "sin contenido" — el bug que ya se
+  pagó con framer-motion y la carta transparente. Envuelto además en
+  `prefers-reduced-motion: no-preference`.
+- `animation-duration` se deja en `auto` a propósito: con timeline de scroll es
+  lo que hace que el progreso lo marque el viewport. El atajo `animation:` lo
+  pondría en `0s` y no animaría nada.
+- Rango `entry 5% entry 60%`, no `cover`. `cover` mide el recorrido completo
+  del elemento por el viewport, y la última sección de la página (horarios)
+  nunca lo recorre entero: el scroll se acaba antes y quedaría congelada a
+  media opacidad para siempre.
+
+Tradeoff: la entrada solo se ve en navegadores con scroll-driven animations
+(Chrome/Edge/Safari). En Firefox la página se ve exactamente como antes. Se
+aceptó a cambio de no pagar ni un byte de JS ni un `IntersectionObserver` en
+el camino de conversión.
+
+**No verificado en navegador**: no hay Chromium en la máquina. Verificado sí:
+`tsc` y `lint` limpios, HTTP 200 en dev, 39 nodos con `reveal` en el HTML del
+server y la regla `@supports` + `animation-timeline: view()` presente en el CSS
+compilado. Falta la pasada visual a 360px y el chequeo de que ninguna sección
+quede a media opacidad.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros
 proyectos). `npm run dev` / `build` / `npx prisma studio` funcionan.
+
+**Desactualizado (visto 2026-08-14)**: en esta máquina no hay binario `docker`
+y el 5435 está cerrado. La DB que usa producción es un Postgres nativo en
+**5432** (`.env.production`). No se tocó nada; queda anotado.
 
 **Producción en esta misma máquina:** pm2, app `casaorigen`,
 `npm start -- -p 3006`, cwd `/var/www/casa-origen`. Desplegar con
