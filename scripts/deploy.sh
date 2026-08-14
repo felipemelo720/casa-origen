@@ -21,6 +21,15 @@ LOCK_FILE=/var/lock/casaorigen-deploy.lock
 MIN_FREE_MB=2048
 DRY_RUN=${DRY_RUN:-0}
 
+# A blocking condition (dirty tree, diverged histories) survives across timer
+# ticks, so an unthrottled `die_loud` sends the same alert every five minutes —
+# 288 a day until a human clears it, which is how a channel gets muted. The
+# state file remembers which message was last sent and when; the same message
+# stays quiet until the repeat window expires. Lives outside /var/lock, which
+# is tmpfs and would forget across a reboot.
+ALERT_STATE_FILE=/var/lib/casaorigen/deploy-alert.state
+ALERT_REPEAT_SEC=21600 # 6 h
+
 # The deploy pulls new code, which can include this very file. Bash reads a
 # running script lazily by byte offset, so rewriting it mid-run corrupts the
 # rest of the execution. Run from a private copy instead.
@@ -66,8 +75,36 @@ die() {
 # disk. Plain `die` stays silent on purpose — "CI still running" fires on every
 # timer tick, and an alert that cries wolf every five minutes gets muted.
 die_loud() {
-  notify "🚨 Casa Origen — deploy detenido: $*"
-  die "$*"
+  local msg="$*" key now last_key='' last_at=0
+
+  key=$(printf '%s' "$msg" | cksum | cut -d' ' -f1)
+  now=$(date +%s)
+
+  if [[ -r $ALERT_STATE_FILE ]]; then
+    read -r last_key last_at <"$ALERT_STATE_FILE" || true
+  fi
+  [[ $last_at =~ ^[0-9]+$ ]] || last_at=0
+
+  if [[ $key == "$last_key" ]] && ((now - last_at < ALERT_REPEAT_SEC)); then
+    log "alert throttled ($(((ALERT_REPEAT_SEC - (now - last_at)) / 60))m to go): $msg"
+  else
+    notify "🚨 Casa Origen — deploy detenido: $msg"
+    # A hand-run DRY_RUN must not consume the real alert's quota.
+    if [[ $DRY_RUN != 1 ]]; then
+      mkdir -p "$(dirname "$ALERT_STATE_FILE")"
+      printf '%s %s\n' "$key" "$now" >"$ALERT_STATE_FILE"
+    fi
+  fi
+
+  die "$msg"
+}
+
+# Silence alone is indistinguishable from a dead monitor, so the recovery is
+# announced once — but only if something was actually blocked.
+alert_resolved() {
+  [[ -e $ALERT_STATE_FILE ]] || return 0
+  rm -f "$ALERT_STATE_FILE"
+  notify "✅ Casa Origen — deploy desbloqueado, el chequeo vuelve a correr limpio."
 }
 
 # Two deploys at once would fight over .next and pm2.
@@ -85,6 +122,7 @@ remote_sha=$(git rev-parse "origin/$BRANCH")
 
 if [[ $local_sha == "$remote_sha" ]]; then
   log "already at ${local_sha:0:7}, nothing to do"
+  alert_resolved
   exit 0
 fi
 
@@ -266,4 +304,6 @@ fi
 trap 'rm -f "$DEPLOY_SELF_COPY"' ERR
 rm -rf .next.prev
 log "deployed ${remote_sha:0:7} — $(git log -1 --pretty=%s)"
+# Quietly, not via alert_resolved: the line below already says it recovered.
+rm -f "$ALERT_STATE_FILE"
 notify "✅ Casa Origen — desplegado ${remote_sha:0:7}: $(git log -1 --pretty=%s)"
