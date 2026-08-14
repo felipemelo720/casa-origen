@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -61,20 +61,52 @@ export function ProductCard({ product }: { product: ProductView }) {
    * la posición real de cada card, sin un `animation-delay` por índice.
    */
   return (
-    <article className="group border-border bg-card reveal relative flex flex-col overflow-hidden rounded-2xl border">
+    <article
+      className={cn(
+        'group border-border bg-card reveal relative flex flex-col overflow-hidden rounded-2xl border',
+        // La tarjeta entera reacciona al hover y al foco del enlace estirado:
+        // sin esto, lo único que decía "esto se abre" era el zoom de la foto,
+        // que se lee como decoración. `focus-within` para que el recorrido con
+        // teclado reciba la misma señal que el mouse.
+        'transition-[border-color,box-shadow,transform] duration-300',
+        'hover:border-primary/60 focus-within:border-primary/60 focus-within:shadow-lg hover:shadow-lg',
+        'motion-safe:focus-within:-translate-y-1 motion-safe:hover:-translate-y-1',
+        // El equivalente táctil del hover: al presionar la foto o el título, la
+        // tarjeta se hunde. `has-[a:active]` y no `active` a secas para que
+        // apretar «Agregar» —que va al carrito, no a la ficha— no la mueva.
+        'has-[a:active]:border-primary/60 motion-safe:has-[a:active]:scale-[0.98]',
+      )}
+    >
       <div className="bg-muted relative aspect-square overflow-hidden">
+        {/* El zoom de hover vive en este contenedor y el de scroll (`peek-zoom`)
+            en la imagen. Si compartieran elemento, el `animation-fill-mode`
+            del segundo congelaría el `transform` y se comería al primero. */}
         {product.image ? (
-          <Image
-            src={product.image}
-            alt={product.name}
-            fill
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
-            className={cn(
-              'object-cover transition-transform duration-500 group-hover:scale-105',
-              isUnavailable && 'grayscale',
-            )}
-          />
+          <div className="absolute inset-0 transition-transform duration-500 group-hover:scale-105">
+            <Image
+              src={product.image}
+              alt={product.name}
+              fill
+              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+              className={cn('peek-zoom object-cover', isUnavailable && 'grayscale')}
+            />
+          </div>
         ) : null}
+
+        {/* Invitación a la ficha. `pointer-events-none` es obligatorio: quien
+            recibe el click es el enlace estirado del título, y un overlay
+            capturándolo dejaría la foto muerta. Mismo scrim `black/` que ya usa
+            el hero sobre una foto: un token de tema lo aclararía en dark, que
+            es justo donde un velo tiene que seguir siendo oscuro. */}
+        <div
+          className="pointer-events-none absolute inset-0 flex items-end justify-center bg-linear-to-t from-black/65 via-black/15 to-transparent p-3 opacity-0 transition-opacity duration-300 group-focus-within:opacity-100 group-hover:opacity-100 motion-reduce:transition-none"
+          aria-hidden
+        >
+          <span className="bg-background text-foreground inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shadow-md">
+            Ver detalles
+            <ArrowUpRight className="size-3.5" />
+          </span>
+        </div>
 
         {isUnavailable && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -95,6 +127,29 @@ export function ProductCard({ product }: { product: ProductView }) {
             ))}
           </div>
         )}
+
+        {/* Las dos pistas permanentes, una por breakpoint. El overlay de arriba
+            vive del hover y el caso mayoritario es un Android que no tiene
+            hover: ahí la tarjeta no avisaba nunca que se abre.
+
+            En móvil va con texto y no solo la flecha —una flecha suelta sobre
+            una foto se lee como decoración— y va abajo, pegada al título, no
+            arriba tapando la pizza. Desde `sm` basta la flecha: ese breakpoint
+            sí tiene hover y recibe la píldora grande. */}
+        <span
+          className="peek-cue bg-background/90 text-foreground pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold shadow-sm backdrop-blur-sm sm:hidden"
+          aria-hidden
+        >
+          Ver detalles
+          <ArrowUpRight className="size-3" />
+        </span>
+
+        <span
+          className="bg-background/90 text-foreground pointer-events-none absolute top-2 right-2 hidden size-8 items-center justify-center rounded-full shadow-sm backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 motion-reduce:transition-none sm:flex"
+          aria-hidden
+        >
+          <ArrowUpRight className="size-4" />
+        </span>
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-4">
@@ -106,7 +161,7 @@ export function ProductCard({ product }: { product: ProductView }) {
               camino corto al carrito no se pierde. */}
           <Link
             href={href}
-            className="after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:outline-none"
+            className="decoration-primary underline-offset-4 group-hover:underline after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:outline-none"
           >
             {product.name}
           </Link>

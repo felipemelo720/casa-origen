@@ -311,6 +311,69 @@
          */
         animation-range: entry 5% entry 60%;
       }
+
+      /*
+       * La tarjeta de producto lleva a su ficha, y en un teléfono no hay hover
+       * que lo insinúe. Estas dos utilidades hacen que la tarjeta *se muestre
+       * sola* mientras entra: la foto termina de acomodarse y la píldora «Ver
+       * detalles» sube desde el borde. Es la misma señal que da el hover en
+       * escritorio, conducida por el scroll en vez del puntero.
+       *
+       * Misma timeline que `.reveal` y misma degradación: sin `view()` la regla
+       * no existe y todo queda quieto y visible, nunca invisible.
+       */
+
+      /*
+       * Zoom de asentamiento. Va en la imagen y **no** en el contenedor que
+       * tiene el `group-hover:scale-105`: `animation-fill-mode: both` congela
+       * el `transform` del elemento animado y le comería la transición de
+       * hover. Separados, uno escala al otro y las dos señales conviven.
+       */
+      .peek-zoom {
+        animation-name: peek-zoom;
+        animation-fill-mode: both;
+        animation-timing-function: linear;
+        animation-timeline: view();
+        /* Cierra cuando la tarjeta terminó de entrar: el movimiento acompaña
+           al scroll y no queda a medias al frenar. */
+        animation-range: entry 0% entry 100%;
+      }
+
+      .peek-cue {
+        animation-name: peek-cue;
+        animation-fill-mode: both;
+        animation-timing-function: linear;
+        animation-timeline: view();
+        /* Arranca después del zoom: primero se acomoda la foto, después
+           aparece la invitación. Encimadas se leen como un solo parpadeo. */
+        animation-range: entry 40% entry 90%;
+      }
+    }
+  }
+
+  @keyframes peek-zoom {
+    from {
+      transform: scale(1.08);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+
+  /* Sube y se pasa 2px, como un objeto que se apoya. Sin rebote infinito: un
+     loop en 20 tarjetas es ruido, y la señal ya la dio la primera pasada. */
+  @keyframes peek-cue {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    70% {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 }

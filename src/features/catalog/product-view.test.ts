@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  entryPrice,
   initialSelection,
   largestAvailableOption,
   priceRange,
@@ -128,5 +129,42 @@ describe('priceRange', () => {
       groups: [group('sauce', [option({ id: 'bbq', priceDelta: 900 })], false)],
     });
     expect(priceRange(withOptional)).toEqual({ min: 5500, max: 5500 });
+  });
+});
+
+describe('entryPrice', () => {
+  it('is the cheapest required option on top of the base', () => {
+    const withSizes = product({
+      groups: [
+        group('sizes', [
+          option({ id: '24', priceDelta: 0 }),
+          option({ id: '32', priceDelta: 4500 }),
+        ]),
+      ],
+    });
+    expect(entryPrice(withSizes)).toBe(5500);
+  });
+
+  it('skips a sold-out size: the landing must not advertise a price the kitchen cannot serve', () => {
+    const soldOutSmall = product({
+      groups: [
+        group('sizes', [
+          option({ id: '24', priceDelta: 0, isAvailable: false }),
+          option({ id: '32', priceDelta: 4500 }),
+        ]),
+      ],
+    });
+    expect(entryPrice(soldOutSmall)).toBe(10000);
+    // El rango de la carta sigue contando el tamaño agotado: describe el menú.
+    expect(priceRange(soldOutSmall).min).toBe(5500);
+  });
+
+  it('ignores optional groups and anchors on offerPrice', () => {
+    const withOptional = product({
+      price: 7200,
+      offerPrice: 7000,
+      groups: [group('sauce', [option({ id: 'bbq', priceDelta: 900 })], false)],
+    });
+    expect(entryPrice(withOptional)).toBe(7000);
   });
 });

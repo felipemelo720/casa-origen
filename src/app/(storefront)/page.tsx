@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { ClosedNotice } from '@/components/shared/closed-notice';
 import { ProductCard } from '@/features/catalog/product-card';
 import { productPath, promoPath } from '@/features/catalog/product-path';
-import { toProductView } from '@/features/catalog/product-view';
+import { entryPrice, toProductView } from '@/features/catalog/product-view';
 import { DeliveryChecker } from '@/features/delivery/delivery-checker';
 import { ComboPromoCard } from '@/features/promo/combo-promo-card';
 import { buildComboPromoView } from '@/features/promo/combo-promo-view';
@@ -86,6 +86,19 @@ export default async function HomePage() {
       .values(),
   ].sort((a, b) => a.category.sortOrder - b.category.sortOrder);
 
+  // El «desde» del hero sale de la primera categoría de la carta, no del menú
+  // entero: la más barata de todo el catálogo es una bebida, y anunciarla como
+  // precio de entrada sería cierto y engañoso a la vez. Se calcula sobre los
+  // productos ya traídos, sin query extra.
+  const leadCategory = menuByCategory[0];
+  const leadPrices = (leadCategory?.items ?? [])
+    .filter((product) => product.availability === 'AVAILABLE')
+    .map((product) => entryPrice(toProductView(product)));
+  const priceFrom =
+    leadCategory && leadPrices.length > 0
+      ? { categoryName: leadCategory.category.name, amount: Math.min(...leadPrices) }
+      : null;
+
   return (
     <div>
       <RestaurantJsonLd
@@ -99,12 +112,15 @@ export default async function HomePage() {
         schedule={schedule}
       />
 
+      {/* Sin `kicker`: era `settings.tagline` («Cocina de origen, sabor de
+          siempre») encima del título del banner («Cocina de origen»), o sea la
+          misma frase dos veces. La tagline sigue viva en el footer. */}
       <StorefrontHero
-        kicker={settings.tagline}
         title={hero?.title ?? settings.name}
         subtitle={hero?.subtitle ?? settings.description}
         image={hero?.image ?? null}
         open={open}
+        priceFrom={priceFrom}
       />
 
       <TrustBar

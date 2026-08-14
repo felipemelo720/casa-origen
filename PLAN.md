@@ -1760,6 +1760,115 @@ nuevos sobre `toProductView`/`priceRange`). En producción, `GET /` y
 **No verificado en navegador**: no hay Chromium en la máquina. Falta la pasada a
 360px sobre la ficha, la galería y el panel de compra.
 
+## La tarjeta no decía que se abría (2026-08-14)
+
+**Problema.** `/producto/[slug]` existe desde el corte anterior, pero la única
+señal de que la tarjeta lleva ahí era el zoom de la foto en hover, que se lee
+como decoración. En móvil —el caso mayoritario, Android sin hover— no había
+ninguna: el enlace estirado cubre toda la card y es invisible.
+
+**Lo que entró**, todo en `src/features/catalog/product-card.tsx`, CSS sobre
+`group`, cero JS y ningún componente nuevo que hidratar:
+
+- Tarjeta: `hover`/`focus-within` sube el borde a `border-primary/60`, agrega
+  `shadow-lg` y la levanta 4px. `focus-within` para que el teclado reciba la
+  misma señal que el mouse.
+- Foto: scrim de abajo hacia arriba + píldora «Ver detalles ↗», de `opacity-0`
+  a `100` en hover y foco. `pointer-events-none` obligatorio: el click lo tiene
+  que seguir recibiendo el enlace estirado, y un overlay capturándolo dejaría
+  la foto muerta.
+- **Pista permanente, distinta por breakpoint.** En móvil, píldora con texto
+  abajo a la izquierda (`sm:hidden`), pegada al título y no tapando la pizza:
+  una flecha suelta sobre una foto no comunica nada. Desde `sm` queda solo la
+  flecha arriba a la derecha, porque ahí el hover ya trae la píldora grande.
+- Equivalente táctil del hover: `has-[a:active]:` hunde la tarjeta al 98%. Con
+  `active:` a secas, apretar «Agregar» —que va al carrito, no a la ficha— la
+  habría movido igual.
+- Título con subrayado `decoration-primary` en hover: es el enlace real.
+
+Ambos íconos `aria-hidden` y sin `<Link>` nuevo: el nombre accesible ya lo pone
+el título y un segundo tab stop por card sumaba ~20 paradas a la carta.
+
+**Tradeoff.** La píldora móvil tapa una esquina de la foto en las ~20 tarjetas
+de la carta. Se paga: una foto entera que nadie sabe que es tocable vale menos
+que una con una esquina ocupada.
+
+**Verificado.** `tsc --noEmit`, `lint` y `format:check` limpios.
+
+**No verificado en navegador**: no hay Chromium, y levantar `next dev` en este
+cwd le pisa `.next` a producción (3006). Falta la pasada a 360px y el chequeo
+del `has-[a:active]` en un teléfono real.
+
+## El hero decía dos veces lo mismo y no decía el precio (2026-08-14)
+
+**Hipótesis.** El visitante cae en la portada y lo primero que lee es la tagline
+(«Cocina de origen, sabor de siempre») encima del título del banner («Cocina de
+origen»): la misma frase dos veces, cero información. De las cinco objeciones de
+la rúbrica, la portada solo contestaba «¿me llega?» —y solo con un botón—, y
+únicamente hablaba del estado del local cuando estaba **cerrado**.
+
+Capas tocadas: UI (`hero.tsx`), view model (`product-view.ts`), page.
+
+**Lo que entró**
+
+- **Fuera el kicker.** `page.tsx` ya no le pasa `settings.tagline` al hero; la
+  tagline sigue viva en el footer, que es donde no compite con el título.
+- **Píldora «Abierto ahora»** cuando el local recibe pedidos, con los mismos
+  tokens que el badge del header y `opening-hours` (`bg-success/15` +
+  `text-foreground`, punto `bg-success`). Cerrado sigue mostrando
+  `ClosedNotice`, sin duplicar la señal.
+- **«Pizzas desde $5.500»** bajo el subtítulo. Sale de `entryPrice()` nuevo en
+  `product-view.ts` sobre la **primera categoría de la carta**, no sobre el menú
+  entero: lo más barato del catálogo es una bebida de $1.200, y anunciar eso
+  como precio de entrada sería cierto y engañoso a la vez. Cero queries nuevas:
+  se calcula sobre los productos que `page.tsx` ya trae.
+- `entryPrice` filtra por `isAvailable`, a diferencia de `priceRange`: con el
+  tamaño chico agotado, la portada no puede prometer un precio que la cocina no
+  sirve. `priceRange` queda como está porque alimenta el JSON-LD, que describe
+  la carta y no el stock del minuto. Tres tests nuevos, uno de ellos fija esa
+  diferencia.
+- **Superficies.** El panel pasó de `bg-background` a `bg-card`: sobre el fondo
+  del mismo color no se leía como placa. `dark:shadow-none` porque en dark la
+  sombra no existe y el contrato dice subir `--card`, no apilar sombra. La foto
+  suma `ring-border`.
+- **El velo de la foto dejó de ser `from-black/25`** (color hardcodeado,
+  prohibición §9) y pasa a `from-background/70`, o sea funde la foto contra el
+  panel por el lado que lo tiene al lado: abajo en móvil, a la izquierda en
+  `lg`.
+- **Fuera `animate-fade-up` del panel.** Contiene el `h1`, o sea el candidato a
+  LCP, y arrancarlo en `opacity: 0` retrasaba medio segundo el paint del texto
+  más importante de la página a cambio de nada. El resto de la landing ya anima
+  por scroll con `.reveal`.
+- CTAs a ancho completo bajo `sm`: dentro del panel quedan 280px útiles a 360px
+  y los dos botones en línea se partían en dos filas angostas. Copy «Ver la
+  carta» en vez de «Ver el menú», que es como la llama el resto del sitio.
+
+**Tradeoffs asumidos.**
+
+- La píldora «Abierto ahora» hereda el desfase de `revalidate = 60`, igual que
+  el aviso de cerrado que ya estaba. Ahora el desfase también puede mentir en
+  positivo por hasta un minuto; el badge vivo del header y el rechazo de
+  `placeOrder` siguen siendo la verdad.
+- El «desde» depende del orden de las categorías (`sortOrder`): si mañana las
+  bebidas quedan primeras, el hero anuncia $1.200. Es dato del admin, no código.
+
+**Verificado.** `tsc --noEmit`, `lint` y los 15 tests de `product-view` en
+verde. Render real comprobado en una **copia del repo** corriendo `next dev` en
+3010 desde `/tmp` con `node_modules` symlinkeado: el HTML del server trae
+«Abierto ahora», «Pizzas desde $5.500», el `h1` sin la tagline encima y los dos
+CTA.
+
+**Incidente.** El primer intento levantó `next dev` en `/var/www/casa-origen` y
+le pisó `.next/static` a producción: 3006 seguía devolviendo 200 en el HTML pero
+sus chunks daban 400, o sea el sitio roto en el browser. Restaurado con
+`pm2 stop && rm -rf .next && npm run build && pm2 start` **desde el árbol
+commiteado** (los cambios del hero quedaron en `git stash` para no desplegar
+nada sin pedirlo). Verificado después: HTML 200 y los cuatro primeros chunks 200. `CLAUDE.md` ya avisaba de la dirección contraria (build con dev arriba);
+esta es la misma trampa al revés.
+
+**Sin verificar en navegador**: no hay Chromium en la máquina. Falta la pasada
+visual a 360px/768px/1280px, light y dark, y el recorrido con teclado.
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.

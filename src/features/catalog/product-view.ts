@@ -129,6 +129,29 @@ export function toProductDetailView(product: ProductDetail): ProductDetailView {
 }
 
 /**
+ * Lo mínimo que puede costar el producto **hoy**: el piso de `priceRange`, pero
+ * mirando sólo las opciones disponibles. Es el número que la portada anuncia
+ * como «desde», y por eso la diferencia importa: con el tamaño chico agotado,
+ * `priceRange` seguiría prometiendo un precio que la cocina no puede servir.
+ * `priceRange` no cambia porque además alimenta el JSON-LD, que describe la
+ * carta y no el stock del minuto.
+ *
+ * No es una autoridad de precios: `pricing.service` sigue siendo la única, y
+ * esto es la misma aritmética que la tarjeta ya dibuja (base + delta).
+ */
+export function entryPrice(product: ProductView): number {
+  const base = product.offerPrice ?? product.price;
+  return product.groups
+    .filter((group) => group.isRequired)
+    .reduce((total, group) => {
+      const deltas = group.options
+        .filter((option) => option.isAvailable)
+        .map((option) => option.priceDelta);
+      return deltas.length > 0 ? total + Math.min(...deltas) : total;
+    }, base);
+}
+
+/**
  * Tamaño más grande que la cocina puede hacer: el mayor `priceDelta` entre las
  * opciones disponibles. Cae a la primera disponible cuando todos los deltas son
  * iguales, y a nada cuando el grupo está agotado.

@@ -3,26 +3,32 @@ import { ArrowRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ClosedNotice } from '@/components/shared/closed-notice';
+import { formatMoney } from '@/lib/money';
 import type { OpenState } from '@/server/services/schedule.service';
 
 type Props = {
-  kicker: string | null;
   title: string;
   subtitle: string | null;
   image: string | null;
   open: OpenState;
+  /**
+   * Precio de entrada de la categoría principal de la carta, ya calculado en el
+   * server. `null` cuando no hay nada disponible que anunciar.
+   */
+  priceFrom: { categoryName: string; amount: number } | null;
 };
 
 /**
  * Editorial overlap hero: the copy sits on its own panel that rides over the
  * photo instead of on top of it. Text over a full-bleed image can only be kept
  * legible with a heavy scrim, which flattens the photo; a panel keeps WCAG
- * contrast fixed (`bg-background` on `foreground`) whatever the admin uploads.
+ * contrast fixed (`bg-card` on `card-foreground`) whatever the admin uploads.
  *
- * Server component. The stagger reuses `animate-fade-up` from `globals.css`,
- * which already opts out under `prefers-reduced-motion`.
+ * Server component, cero JS. Sin animación de entrada: el panel contiene el
+ * `h1`, o sea el candidato a LCP, y arrancarlo en `opacity: 0` retrasaba el
+ * paint medio segundo a cambio de nada.
  */
-export function StorefrontHero({ kicker, title, subtitle, image, open }: Props) {
+export function StorefrontHero({ title, subtitle, image, open, priceFrom }: Props) {
   return (
     <section className="relative overflow-hidden pb-16 lg:pb-24">
       {/* Tint behind the photo so the panel is not floating on bare background.
@@ -43,7 +49,7 @@ export function StorefrontHero({ kicker, title, subtitle, image, open }: Props) 
           />
           {/* 4:3, not 16:9: the photo is a vertical phone shot, and a frame that
               wide would crop it down to a band. */}
-          <div className="bg-secondary relative aspect-square overflow-hidden rounded-2xl sm:aspect-4/3">
+          <div className="bg-secondary ring-border relative aspect-square overflow-hidden rounded-2xl ring-1 sm:aspect-4/3">
             {image && (
               <Image
                 src={image}
@@ -54,42 +60,57 @@ export function StorefrontHero({ kicker, title, subtitle, image, open }: Props) 
                 className="object-cover"
               />
             )}
-            {/* Only under the panel's side, so the photo keeps its own light. */}
+            {/* Funde la foto contra el panel por el lado que lo tiene al lado:
+                abajo en móvil, a la izquierda en `lg`. Va con `--background` y
+                no con negro, que además de estar prohibido dejaba la foto
+                apagada en light por igual. */}
             <div
-              className="absolute inset-0 bg-linear-to-t from-black/25 to-transparent lg:bg-linear-to-r lg:from-black/25 lg:to-transparent"
+              className="from-background/70 lg:from-background/60 absolute inset-0 bg-linear-to-t to-transparent lg:bg-linear-to-r"
               aria-hidden
             />
           </div>
         </div>
 
-        <div className="border-border bg-background animate-fade-up relative z-10 -mt-12 rounded-2xl border p-6 shadow-lg sm:p-8 lg:col-span-6 lg:col-start-1 lg:row-start-1 lg:mt-0 lg:p-10">
-          {kicker && (
-            <p className="text-primary flex items-center gap-3 text-xs font-semibold tracking-[0.2em] uppercase">
-              <span className="bg-primary h-px w-8" aria-hidden />
-              {kicker}
-            </p>
-          )}
-
-          <h1 className="font-display mt-4 text-4xl leading-[1.05] font-bold text-balance sm:text-5xl lg:text-6xl">
+        <div className="border-border bg-card relative z-10 -mt-12 rounded-2xl border p-6 shadow-lg sm:p-8 lg:col-span-6 lg:col-start-1 lg:row-start-1 lg:mt-0 lg:p-10 dark:shadow-none">
+          {/* Sin píldora de «Abierto ahora»: el badge del header ya lo dice, y
+              encima en vivo (poll a `/api/open-state`), mientras que acá quedaba
+              congelado hasta el próximo `revalidate = 60`. Dos señales del mismo
+              estado, una de ellas más lenta, es la que va a mentir primero. El
+              caso cerrado sí se repite abajo, porque bloquea el pedido. */}
+          <h1 className="font-display text-4xl leading-[1.05] font-bold text-balance sm:text-5xl lg:text-6xl">
             {title}
           </h1>
 
           {subtitle && (
-            <p className="text-muted-foreground mt-4 max-w-prose text-base sm:text-lg">
+            <p className="text-muted-foreground mt-4 max-w-prose text-base text-pretty sm:text-lg">
               {subtitle}
             </p>
           )}
 
           {!open.isOpen && <ClosedNotice className="mt-5">{open.reason}</ClosedNotice>}
 
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Button size="lg" asChild>
+          {/* "¿Cuánto sale?" es la segunda objeción de la rúbrica y no tenía
+              respuesta hasta scrollear hasta la carta. */}
+          {priceFrom && (
+            <p className="mt-6 text-sm">
+              <span className="text-muted-foreground">{priceFrom.categoryName} desde </span>
+              <span className="text-foreground font-semibold tabular-nums">
+                {formatMoney(priceFrom.amount)}
+              </span>
+            </p>
+          )}
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            {/* Ancho completo en móvil: dentro del panel quedan 280px útiles a
+                360px y los dos botones en línea se partían en dos filas con
+                objetivos angostos. */}
+            <Button size="lg" className="w-full sm:w-auto" asChild>
               <a href="#menu">
-                {open.isOpen ? 'Ver el menú' : 'Ver el menú igual'}
+                {open.isOpen ? 'Ver la carta' : 'Ver la carta igual'}
                 <ArrowRight className="size-4" aria-hidden />
               </a>
             </Button>
-            <Button size="lg" variant="outline" asChild>
+            <Button size="lg" variant="outline" className="w-full sm:w-auto" asChild>
               <a href="#cobertura">¿Llegamos a ti?</a>
             </Button>
           </div>
