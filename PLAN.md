@@ -1529,6 +1529,76 @@ columnas quedan igual.
 password, así que los anchos salen de leer el CSS, no de medirlos. Falta la
 pasada real a 360px.
 
+## Fotos propias en la carta (2026-08-14)
+
+`cherry-margarita.jpg`, `tres-carnes.jpg` y `napolitana.jpg` reemplazadas por
+fotos del local. Recortadas a **1:1 a 1000×1000** con `sharp` (mozjpeg q82); las
+anteriores mezclaban 1200×800, 651×651 y 1200×900, así que cada card recortaba
+distinto. Los nombres no cambiaron: cero impacto en seed y en DB.
+
+**Tradeoff.** El recorte es a ojo, no por detección del plato. Los originales
+son verticales y la pizza entera no entra en cuadrado, así que `napolitana` y
+`cherry` muestran un sector; solo `tres-carnes` sale completa.
+
+## Promo individual: producto, no promoción (2026-08-14)
+
+**Problema del cliente.** El flyer «Pizza + bebida 350 cc por $7.000» no se
+podía expresar con el motor de promociones.
+
+Tres bloqueos, todos del modelo y no de configuración:
+
+1. `src/lib/bundle-promo.ts:37` — `BundleRule` es **homogéneo**: exige que toda
+   unidad del bundle comparta el mismo `VariantOption.name`. Una pizza y una
+   bebida no comparten ninguno. `bundleSize: 2, variantName: '24 cm'` agarraría
+   dos pizzas de 24, nunca pizza + bebida.
+2. `src/server/services/pricing.service.ts:227` — el loop hace `break`: **una
+   sola promoción por pedido**. Un combo-promoción se comería el slot de la
+   Promo Dúo cuando ambos caen en el mismo carrito.
+3. `src/server/repositories/promotion.repository.ts:29` — `findFeaturedBundle`
+   es `findFirst({ isFeatured: true })`: un segundo builder destacado se ignora
+   sin avisar.
+
+**Decisión.** El combo no es un descuento sobre un carrito, es un ítem de menú
+con precio propio y dos elecciones adentro. Eso ya lo expresa `Product` +
+`variantGroups`, así que se modeló como producto:
+
+- Categoría **Promos** (`sortOrder` 0, delante de Pizzas), un solo producto.
+- `Combo Individual`, `price 7200` / `offerPrice 7000`. El `price` es la suma
+  suelta ($6.000 + $1.200) y existe solo como ancla tachada.
+- Dos grupos requeridos (`minSelect`/`maxSelect` 1): _Elige tu pizza_
+  (Napolitana, Rústica, La Huerta) y _Elige tu bebida_ (Coca-Cola, Zero), todos
+  con `priceDelta: 0`.
+
+Toca `prisma/seed.ts` y nada más: cero cambios en `pricing.service`,
+`bundle-promo.ts` o el schema. El precio sale del camino existente
+(`pricing.service.ts:74`, `offerPrice ?? price` + deltas), y la restricción a
+esas tres pizzas vive en las opciones del grupo, que se validan server-side.
+Al no ser `Promotion` no compite por el `break` ni por `isFeatured`: convive con
+la Promo Dúo en el mismo carrito. Y al no ser categoría `pizzas` queda fuera del
+`scope` de la Dúo, que sigue aplicando solo sobre pizzas de 32 cm.
+
+`seedCatalogue` ahora repite **`sortOrder` en el `update`** de categoría: sin
+eso una categoría nueva no puede colarse delante de las que ya existen, porque
+el `create` es el único que lo escribía. Es seguro porque no hay pantalla de
+admin que cure el orden de categorías — a diferencia de `isFeatured` en
+productos, que sigue deliberadamente fuera del `update`.
+
+**Sin extras en el combo**: habilitarlos dejaría cobrar toppings sobre una base
+ya descontada.
+
+**Tradeoff.** El precio del combo queda congelado: si sube la Napolitana, el
+combo no se entera. Es el costo de no tocar el motor de precios.
+
+**Advertido y asumido.** Con la carta de hoy el combo ahorra **$200** (6.000 +
+1.200 = 7.200). La Promo Dúo ahorra $2.010. Queda pendiente decidir si baja el
+precio del combo, si entra una bebida de 350 cc a precio propio, o si se
+comunica como conveniencia y no como ahorro.
+
+**Verificado.** `npx tsc --noEmit` y `npm run lint` limpios, 205 tests en verde,
+build y despliegue a 3006 con el combo renderizando ($7.000 sobre $7.200
+tachado). **No verificado en navegador**: no hay Chromium en la máquina, así que
+falta la pasada real a 360px sobre la card nueva.
+
 ## Infraestructura dev
 
 Postgres Docker `co-pg`, puerto **5435** (5432-5434 ocupados por otros

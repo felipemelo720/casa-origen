@@ -433,6 +433,58 @@ const pizzaSizes = (deltaTo32: number) => ({
 
 const CATALOGUE: CategorySeed[] = [
   {
+    // Primera de la carta a propósito: es el gancho de entrada y ocupa una sola
+    // card, así que adelantarla no aleja el menú de pizzas.
+    name: 'Promos',
+    description: 'Combos armados, precio cerrado',
+    icon: 'Tag',
+    products: [
+      {
+        // Modelado como producto y no como `Promotion` a propósito. El motor de
+        // promociones cobra un descuento sobre el carrito y es homogéneo:
+        // `bundle-promo.ts` exige que toda unidad del bundle comparta el mismo
+        // `VariantOption.name`, y una pizza y una bebida no comparten ninguno.
+        // Además `pricing.service` aplica una sola promoción por pedido
+        // (`break`), así que un combo-promoción se comería el slot de la Promo
+        // Dúo. Como producto con dos grupos requeridos el precio sale del
+        // camino normal (base + deltas), convive con la Dúo en el mismo
+        // carrito y el operador lo edita desde /admin sin migración.
+        name: 'Combo Individual',
+        shortDescription: 'Pizza de 24 cm + bebida en lata 350 cc',
+        description:
+          'Elige una de nuestras pizzas de 24 cm seleccionadas y una bebida en lata de 350 cc. Precio cerrado, sin sorpresas.',
+        // `price` es la suma de comprar las dos cosas por separado ($6.000 +
+        // $1.200): es el ancla que la card tacha. `offerPrice` es lo que se
+        // cobra. Si mañana sube la Napolitana, este par no se entera solo — el
+        // precio del combo es fijo por diseño.
+        price: 7200,
+        offerPrice: 7000,
+        prepMinutes: 20,
+        isFeatured: true,
+        image: '/menu/napolitana.jpg',
+        // Sin extras: el combo se vende a precio cerrado, y habilitarlos abriría
+        // la puerta a cobrar toppings sobre una base ya descontada.
+        variants: [
+          {
+            name: 'Elige tu pizza',
+            options: [
+              { name: 'Napolitana', priceDelta: 0, isDefault: true },
+              { name: 'Rústica', priceDelta: 0 },
+              { name: 'La Huerta', priceDelta: 0 },
+            ],
+          },
+          {
+            name: 'Elige tu bebida',
+            options: [
+              { name: 'Coca-Cola', priceDelta: 0, isDefault: true },
+              { name: 'Coca-Cola Zero', priceDelta: 0 },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
     name: 'Pizzas',
     description: 'Masa artesanal, horneadas al momento',
     icon: 'Pizza',
@@ -685,7 +737,15 @@ async function seedCatalogue() {
   for (const [categoryIndex, category] of CATALOGUE.entries()) {
     const parent = await prisma.category.upsert({
       where: { slug: slugify(category.name) },
-      update: { description: category.description, icon: category.icon },
+      // `sortOrder` se repite en `update` porque el orden de la carta lo manda
+      // este archivo: sin esto una categoría nueva no puede colarse delante de
+      // las que ya existen. No hay pantalla de admin que lo cure, a diferencia
+      // de `isFeatured` en productos.
+      update: {
+        description: category.description,
+        icon: category.icon,
+        sortOrder: categoryIndex,
+      },
       create: {
         slug: slugify(category.name),
         name: category.name,
