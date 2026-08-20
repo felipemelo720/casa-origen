@@ -8,16 +8,25 @@ import { z } from 'zod';
  * recomputed server-side from the catalogue, so a tampered `localStorage`
  * payload can never change what a customer is charged.
  */
+/**
+ * Topes del carrito. Viven acá, exportados, porque el store del cliente los
+ * necesita para frenar *antes* de armar una línea que este mismo schema iba a
+ * rechazar recién en el checkout.
+ */
+export const MAX_LINE_QUANTITY = 50;
+export const MAX_CART_LINES = 60;
+export const MAX_EXTRA_QUANTITY = 20;
+
 export const cartItemSchema = z.object({
   cartItemId: z.string().min(1),
   productId: z.string().min(1),
-  quantity: z.number().int().min(1).max(50),
+  quantity: z.number().int().min(1).max(MAX_LINE_QUANTITY),
   selectedVariantOptionIds: z.array(z.string().min(1)).max(20),
   selectedExtras: z
     .array(
       z.object({
         extraId: z.string().min(1),
-        quantity: z.number().int().min(1).max(20),
+        quantity: z.number().int().min(1).max(MAX_EXTRA_QUANTITY),
       }),
     )
     .max(20),
@@ -28,7 +37,7 @@ export const cartItemSchema = z.object({
 export type CartItemInput = z.infer<typeof cartItemSchema>;
 
 export const cartSchema = z.object({
-  items: z.array(cartItemSchema).min(1, 'El carrito está vacío.').max(60),
+  items: z.array(cartItemSchema).min(1, 'El carrito está vacío.').max(MAX_CART_LINES),
   couponCode: z.string().trim().max(40).optional(),
 });
 

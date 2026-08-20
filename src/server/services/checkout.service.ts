@@ -63,11 +63,20 @@ export async function placeOrder(input: CheckoutInput) {
     }
   }
 
+  // A signed-in customer owns the order regardless of the phone typed into the
+  // form, so editing that field cannot move the purchase onto someone else's
+  // history. Guests keep the phone-keyed upsert.
+  //
+  // Resolved *before* pricing, not after: `perCustomerLimit` is enforced inside
+  // `priceCart`, and without an id here that check never ran for anyone.
+  const session = await getCurrentCustomer();
+
   const pricingInput: CheckoutPricingInput = {
     items: input.cart.items,
     couponCode: input.cart.couponCode,
     orderType: input.orderType,
     communeId: input.orderType === 'DELIVERY' ? input.communeId : undefined,
+    customerId: session?.id,
   };
 
   const priced = await priceCart(pricingInput);
@@ -89,11 +98,6 @@ export async function placeOrder(input: CheckoutInput) {
   const firstName = sanitizeText(input.firstName, 60);
   const lastName = sanitizeText(input.lastName, 60);
   const email = input.email ? sanitizeEmail(input.email) : undefined;
-
-  // A signed-in customer owns the order regardless of the phone typed into the
-  // form, so editing that field cannot move the purchase onto someone else's
-  // history. Guests keep the phone-keyed upsert.
-  const session = await getCurrentCustomer();
 
   const estimatedMinutes =
     input.orderType === 'DELIVERY'
@@ -189,7 +193,13 @@ export async function placeOrder(input: CheckoutInput) {
     await customerRepository.recordOrder(customer.id, priced.total, tx);
 
     if (priced.couponId) {
-      await couponRepository.incrementUsage(priced.couponId, tx);
+      // Fail closed: between the quote and this write another order can have
+      // taken the last redemption. Throwing rolls the whole order back rather
+      // than handing out a discount the coupon no longer had.
+      const consumed = await couponRepository.consumeUsage(priced.couponId, tx);
+      if (!consumed) {
+        throw new BusinessRuleError('El cupón se agotó mientras confirmabas el pedido.');
+      }
       await couponRepository.createRedemption(
         {
           coupon: { connect: { id: priced.couponId } },

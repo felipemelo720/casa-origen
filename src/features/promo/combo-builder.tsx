@@ -11,6 +11,7 @@ import { ClosedNotice } from '@/components/shared/closed-notice';
 import { formatMoney } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { useCartStore } from '@/features/cart/cart-store';
+import { notifyCartFull } from '@/features/cart/cart-limits';
 import {
   comboTotal,
   type ComboPromoChoice,
@@ -61,7 +62,7 @@ export function ComboBuilder({
     // suelta: el combo es un producto con precio propio, y separarlo lo cobraría
     // a precio de carta. `pricing.service` recalcula igual desde el `productId`
     // y los ids de opción — acá sólo viaja la selección.
-    addLine({
+    const added = addLine({
       productId: promo.productId,
       name: promo.name,
       image: promo.image,
@@ -84,6 +85,13 @@ export function ComboBuilder({
       removedIngredientIds: [],
       removedIngredientNames: [],
     });
+
+    // El panel queda abierto con la selección intacta: cerrarlo haría perder el
+    // combo armado sin haber agregado nada.
+    if (!added) {
+      notifyCartFull();
+      return;
+    }
 
     setPicked({});
     onOpenChange(false);

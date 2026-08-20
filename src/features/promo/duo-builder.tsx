@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { ClosedNotice } from '@/components/shared/closed-notice';
 import { formatMoney } from '@/lib/money';
 import { cn } from '@/lib/utils';
-import { useCartStore } from '@/features/cart/cart-store';
+import { useCartStore, useCartFreeLines } from '@/features/cart/cart-store';
+import { notifyCartFull } from '@/features/cart/cart-limits';
 import type { DuoPromoOption, DuoPromoView } from '@/features/promo/duo-promo-view';
 import type { OpenState } from '@/server/services/schedule.service';
 
@@ -35,6 +36,7 @@ export function DuoBuilder({
   openState: OpenState;
 }) {
   const addLine = useCartStore((state) => state.addLine);
+  const freeLines = useCartFreeLines();
   const reduceMotion = useReducedMotion();
 
   const [picks, setPicks] = useState<DuoPromoOption[]>([]);
@@ -81,6 +83,16 @@ export function DuoBuilder({
   function addToCart() {
     if (!complete || !openState.isOpen) return;
 
+    const drinks = promo.drinks.filter((d) => drinkIds.includes(d.productId));
+
+    // El dúo entra completo o no entra. Media promo se cobraría a precio de
+    // carta: el descuento lo da `pricing.service` al reconocer el par, así que
+    // agregar una sola pizza sería peor que no agregar nada.
+    if (picks.length + drinks.length > freeLines) {
+      notifyCartFull();
+      return;
+    }
+
     // Two ordinary pizza lines, never one opaque "Promo Dúo" item: the customer
     // can still edit each one, the kitchen ticket reads two pizzas, and the
     // discount comes from `pricing.service` recognising the pair.
@@ -107,7 +119,7 @@ export function DuoBuilder({
       });
     }
 
-    for (const drink of promo.drinks.filter((d) => drinkIds.includes(d.productId))) {
+    for (const drink of drinks) {
       addLine({
         productId: drink.productId,
         name: drink.name,

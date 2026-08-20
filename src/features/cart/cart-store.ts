@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 
+import { MAX_CART_LINES, MAX_LINE_QUANTITY } from '@/schemas/cart.schema';
+
 export type CartVariantSelection = {
   groupId: string;
   optionId: string;
@@ -48,7 +50,8 @@ type CartState = {
   close: () => void;
   toggle: () => void;
 
-  addLine: (line: Omit<CartLine, 'cartItemId'>) => void;
+  /** `false` si el carrito ya está en `MAX_CART_LINES`: la línea no se agregó. */
+  addLine: (line: Omit<CartLine, 'cartItemId'>) => boolean;
   removeLine: (cartItemId: string) => void;
   setQuantity: (cartItemId: string, quantity: number) => void;
   setLineExtras: (cartItemId: string, extras: CartExtraSelection[]) => void;
@@ -68,7 +71,7 @@ export function estimateLineTotal(line: CartLine): number {
 
 export const useCartStore = create<CartState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       lines: [],
       isOpen: false,
       orderType: 'DELIVERY',
@@ -77,11 +80,24 @@ export const useCartStore = create<CartState>()(
       close: () => set({ isOpen: false }),
       toggle: () => set((state) => ({ isOpen: !state.isOpen })),
 
-      addLine: (line) =>
+      // Los dos topes son los mismos que `cartSchema` aplica en el server. Sin
+      // esto el carrito crecía sin freno y el rechazo llegaba recién al
+      // confirmar, con el pedido ya armado.
+      addLine: (line) => {
+        if (get().lines.length >= MAX_CART_LINES) return false;
         set((state) => ({
-          lines: [...state.lines, { ...line, cartItemId: nanoid(10) }],
+          lines: [
+            ...state.lines,
+            {
+              ...line,
+              cartItemId: nanoid(10),
+              quantity: Math.min(Math.max(1, line.quantity), MAX_LINE_QUANTITY),
+            },
+          ],
           isOpen: true,
-        })),
+        }));
+        return true;
+      },
 
       removeLine: (cartItemId) =>
         set((state) => ({ lines: state.lines.filter((l) => l.cartItemId !== cartItemId) })),
@@ -91,7 +107,11 @@ export const useCartStore = create<CartState>()(
           lines:
             quantity <= 0
               ? state.lines.filter((l) => l.cartItemId !== cartItemId)
-              : state.lines.map((l) => (l.cartItemId === cartItemId ? { ...l, quantity } : l)),
+              : state.lines.map((l) =>
+                  l.cartItemId === cartItemId
+                    ? { ...l, quantity: Math.min(quantity, MAX_LINE_QUANTITY) }
+                    : l,
+                ),
         })),
 
       setLineExtras: (cartItemId, extras) =>
@@ -105,12 +125,30 @@ export const useCartStore = create<CartState>()(
       setOrderType: (orderType) => set({ orderType }),
       setCommune: (communeId) => set({ communeId }),
     }),
-    { name: 'casa-origen-cart', version: 1 },
+    {
+      name: 'casa-origen-cart',
+      version: 1,
+      // `localStorage` es editable a mano y además puede traer un carrito
+      // guardado antes de que existieran los topes. Recortarlo al rehidratar
+      // evita mostrar un carrito que el checkout no va a aceptar.
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<CartState>;
+        const lines = (saved.lines ?? [])
+          .slice(0, MAX_CART_LINES)
+          .map((line) => ({ ...line, quantity: Math.min(line.quantity, MAX_LINE_QUANTITY) }));
+        return { ...current, ...saved, lines };
+      },
+    },
   ),
 );
 
 export function useCartCount(): number {
   return useCartStore((state) => state.lines.reduce((sum, line) => sum + line.quantity, 0));
+}
+
+/** Cuántas líneas más acepta el carrito. 0 = lleno. */
+export function useCartFreeLines(): number {
+  return useCartStore((state) => MAX_CART_LINES - state.lines.length);
 }
 
 export function useCartSubtotal(): number {

@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ErrorCode } from '@/lib/errors';
 import { formatMoney, formatMoneyRange } from '@/lib/money';
 import { estimateLineTotal, toCartItemInput, useCartStore } from '@/features/cart/cart-store';
 import { placeOrderAction, previewCartTotalsAction } from '@/server/actions/checkout.actions';
@@ -102,6 +103,7 @@ export function CheckoutForm({
   const clearCart = useCartStore((state) => state.clear);
 
   const [couponInput, setCouponInput] = useState(couponCode ?? '');
+  const [couponError, setCouponError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const { communes, paymentMethods, deliveryEnabled } = options;
@@ -165,6 +167,19 @@ export function CheckoutForm({
   const previewError =
     previewQuery.data && !previewQuery.data.ok ? previewQuery.data.message : null;
 
+  // The code is persisted in `localStorage`, so a rejected coupon would keep
+  // failing every quote from here on and leave the cart unable to check out
+  // with no way to take it back. Drop the code and keep the reason on screen —
+  // only for a coupon error: a cart the server rejects for any other reason
+  // must not lose the coupon the customer applied.
+  const previewFailure = previewQuery.data && !previewQuery.data.ok ? previewQuery.data : null;
+  useEffect(() => {
+    if (previewFailure?.code === ErrorCode.COUPON_INVALID) {
+      setCouponError(previewFailure.message);
+      setCoupon(undefined);
+    }
+  }, [previewFailure, setCoupon]);
+
   const subtotal = lines.reduce((sum, line) => sum + estimateLineTotal(line), 0);
   const cashGivenAmount = Number.parseInt((watchedCashGiven ?? '').replace(/[^\d]/g, ''), 10) || 0;
   const changeDue = preview ? Math.max(0, cashGivenAmount - preview.total) : 0;
@@ -219,7 +234,14 @@ export function CheckoutForm({
   }
 
   function applyCoupon() {
+    setCouponError(null);
     setCoupon(couponInput.trim() || undefined);
+  }
+
+  function removeCoupon() {
+    setCouponError(null);
+    setCouponInput('');
+    setCoupon(undefined);
   }
 
   return (
@@ -392,6 +414,26 @@ export function CheckoutForm({
           <Button type="button" variant="outline" className="h-11 px-6" onClick={applyCoupon}>
             Aplicar
           </Button>
+        </div>
+        {/* `aria-live`: applying a coupon does not move focus, so the outcome
+            has to be announced where it happens instead of only changing the
+            totals further down. */}
+        <div aria-live="polite">
+          {couponError && <p className="text-destructive text-xs">{couponError}</p>}
+          {couponCode && !couponError && (
+            <p className="text-muted-foreground flex items-center gap-2 text-xs">
+              <span>
+                Cupón <span className="text-foreground font-medium">{couponCode}</span> aplicado.
+              </span>
+              <button
+                type="button"
+                onClick={removeCoupon}
+                className="focus-visible:ring-ring rounded underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+              >
+                Quitar
+              </button>
+            </p>
+          )}
         </div>
       </section>
 

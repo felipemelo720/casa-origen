@@ -1,6 +1,6 @@
 import { startOfDay, subDays } from 'date-fns';
 import Link from 'next/link';
-import { DollarSign, Receipt, ShoppingBag, Star, Store } from 'lucide-react';
+import { DollarSign, Receipt, ShoppingBag, Star, Store, TicketPercent } from 'lucide-react';
 
 import { isAdminAuthenticated } from '@/lib/auth/admin-session';
 import {
@@ -13,11 +13,15 @@ import {
   updateBusinessHoursAction,
   updateCommunesAction,
 } from '@/server/actions/admin.actions';
+import { createCouponAction } from '@/server/actions/coupon.actions';
 import { communeRepository, settingsRepository } from '@/server/repositories/operations.repository';
 import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
 import { analyticsRepository } from '@/server/repositories/analytics.repository';
+import { couponRepository } from '@/server/repositories/promotion.repository';
 import { getWeeklySchedule } from '@/server/services/schedule.service';
 import { AdminForm, AdminSubmit } from '@/features/admin/admin-form';
+import { NewCouponFields } from '@/features/admin/coupon-fields';
+import { CouponRow } from '@/features/admin/coupon-row';
 import { ScheduleDayRow } from '@/features/admin/schedule-day-row';
 import { ZoneRow } from '@/features/admin/zone-row';
 import { StatCard } from '@/features/admin/stat-card';
@@ -61,13 +65,16 @@ export default async function AdminPage() {
     );
   }
 
-  const [settings, products, weeklySchedule, zones] = await Promise.all([
+  const [settings, products, weeklySchedule, zones, coupons] = await Promise.all([
     settingsRepository.get(),
     productRepository.findAllForAvailabilityToggle(),
     getWeeklySchedule(),
     // `findAllForAdmin`, no `findAllActive`: una zona apagada tiene que seguir
     // visible acá, si no no hay forma de volver a encenderla.
     communeRepository.findAllForAdmin(),
+    // Mismo criterio: los cupones apagados siguen en la lista porque apagar es
+    // la única forma de retirar uno (borrarlo se llevaría las redenciones).
+    couponRepository.findAllForAdmin(),
   ]);
 
   const featuredCount = products.filter((product) => product.isFeatured).length;
@@ -423,6 +430,38 @@ export default async function AdminPage() {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* Coupons */}
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-4 sm:p-6 lg:col-span-2 lg:col-start-2 lg:row-start-4">
+          <div>
+            <p className="text-muted-foreground text-xs tracking-widest uppercase">Cupones</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              El cliente escribe el código en el checkout. «Mostrar en la web» además lo publica en
+              la portada; sin eso el código existe pero no se anuncia en ninguna parte.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            {coupons.length === 0 ? (
+              <p className="text-muted-foreground border-border rounded-xl border border-dashed p-4 text-center text-sm">
+                Todavía no hay cupones. Crea el primero acá abajo.
+              </p>
+            ) : (
+              coupons.map((coupon) => <CouponRow key={coupon.id} coupon={coupon} />)
+            )}
+          </div>
+
+          {/* El alta va debajo de la lista: lo que se mira a diario es qué
+              cupones andan dando vueltas, no el formulario. */}
+          <AdminForm action={createCouponAction} className="border-border space-y-3 border-t pt-4">
+            <p className="text-muted-foreground flex items-center gap-1.5 text-xs tracking-widest uppercase">
+              <TicketPercent className="size-3.5" aria-hidden="true" />
+              Cupón nuevo
+            </p>
+            <NewCouponFields />
+            <AdminSubmit className="h-11 w-full">Crear cupón</AdminSubmit>
+          </AdminForm>
         </section>
       </div>
     </main>

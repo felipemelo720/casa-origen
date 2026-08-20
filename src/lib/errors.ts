@@ -13,6 +13,7 @@ export const ErrorCode = {
   CONFLICT: 'CONFLICT',
   RATE_LIMITED: 'RATE_LIMITED',
   BUSINESS_RULE: 'BUSINESS_RULE_VIOLATION',
+  COUPON_INVALID: 'COUPON_INVALID',
   INTERNAL: 'INTERNAL_ERROR',
 } as const;
 
@@ -91,6 +92,20 @@ export class RateLimitError extends AppError {
 export class BusinessRuleError extends AppError {
   constructor(message: string) {
     super(message, { code: ErrorCode.BUSINESS_RULE, status: 409 });
+  }
+}
+
+/**
+ * The cart is fine, the coupon is not.
+ *
+ * Its own code and not `BusinessRuleError` because the checkout has to tell the
+ * two apart: the code lives in `localStorage`, so a rejected coupon would keep
+ * failing every later quote on a cart the customer never touched again. The
+ * client drops the code when it sees this; a rejected *cart* must keep it.
+ */
+export class CouponError extends AppError {
+  constructor(message: string) {
+    super(message, { code: ErrorCode.COUPON_INVALID, status: 409 });
   }
 }
 

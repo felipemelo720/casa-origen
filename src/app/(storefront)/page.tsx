@@ -9,6 +9,7 @@ import { ComboPromoCard } from '@/features/promo/combo-promo-card';
 import { buildComboPromoView } from '@/features/promo/combo-promo-view';
 import { DuoPromoCard } from '@/features/promo/duo-promo-card';
 import { buildDuoPromoView } from '@/features/promo/duo-promo-view';
+import { CouponBanner } from '@/features/storefront/coupon-banner';
 import { EventOrders } from '@/features/storefront/event-orders';
 import { StorefrontHero } from '@/features/storefront/hero';
 import { HowToOrder } from '@/features/storefront/how-to-order';
@@ -23,7 +24,7 @@ import {
   communeRepository,
   settingsRepository,
 } from '@/server/repositories/operations.repository';
-import { promotionRepository } from '@/server/repositories/promotion.repository';
+import { couponRepository, promotionRepository } from '@/server/repositories/promotion.repository';
 
 export const revalidate = 60;
 
@@ -46,6 +47,7 @@ export default async function HomePage() {
     schedule,
     featuredBundle,
     comboProduct,
+    publicCoupon,
   ] = await Promise.all([
     settingsRepository.get(),
     bannerRepository.findActiveByPlacement('HERO'),
@@ -60,6 +62,7 @@ export default async function HomePage() {
     // Its own query and not part of `findAllForMenu`: the combo is deliberately
     // `isVisible: false`, so the menu pass cannot see it.
     productRepository.findComboPromo(),
+    couponRepository.findPublicActive(),
   ]);
 
   const hero = heroBanners[0];
@@ -134,6 +137,8 @@ export default async function HomePage() {
           zones.length > 0 ? Math.min(...zones.map((zone) => zone.deliveryFeeMin)) : null
         }
       />
+
+      {publicCoupon && <CouponBanner coupon={publicCoupon} />}
 
       {duoPromo && featuredBundle && (
         <DuoPromoCard

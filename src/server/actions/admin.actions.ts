@@ -3,12 +3,12 @@
 import { revalidatePath } from 'next/cache';
 
 import {
+  assertAdmin,
   createAdminSession,
   clearAdminSession,
   verifyAdminPassword,
-  isAdminAuthenticated,
 } from '@/lib/auth/admin-session';
-import { ErrorCode, ForbiddenError } from '@/lib/errors';
+import { ErrorCode } from '@/lib/errors';
 import { parseMoney } from '@/lib/money';
 import { fail, failFrom, ok, type ActionResult } from '@/lib/result';
 import { communeRepository, settingsRepository } from '@/server/repositories/operations.repository';
@@ -31,10 +31,6 @@ import { updateBusinessHours } from '@/server/services/schedule.service';
  * argumento propio lo reciben antes y se atan con `.bind()`.
  */
 type AdminResult = ActionResult<string>;
-
-async function assertAdmin(): Promise<void> {
-  if (!(await isAdminAuthenticated())) throw new ForbiddenError();
-}
 
 export async function loginAction(_state: AdminResult | null, formData: FormData) {
   const password = String(formData.get('password') ?? '');

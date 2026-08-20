@@ -3,6 +3,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 
 import { env, isProduction } from '@/config/env';
+import { ForbiddenError } from '@/lib/errors';
 import { timingSafeEqual } from '@/lib/security/timing-safe-equal';
 import { deriveAdminSessionToken } from '@/lib/security/session-token';
 
@@ -42,4 +43,15 @@ export async function isAdminAuthenticated(): Promise<boolean> {
 
 export function verifyAdminPassword(password: string): boolean {
   return timingSafeEqual(password, env.ADMIN_PASSWORD);
+}
+
+/**
+ * Guard de toda acción del panel.
+ *
+ * Vive acá y no en `admin.actions.ts` porque ese archivo es `'use server'`:
+ * exportarla desde ahí la publicaría como endpoint. Acá la comparten los dos
+ * archivos de acciones sin quedar expuesta.
+ */
+export async function assertAdmin(): Promise<void> {
+  if (!(await isAdminAuthenticated())) throw new ForbiddenError();
 }

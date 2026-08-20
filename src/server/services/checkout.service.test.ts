@@ -32,7 +32,7 @@ vi.mock('@/server/repositories/customer.repository', () => ({
 }));
 
 vi.mock('@/server/repositories/promotion.repository', () => ({
-  couponRepository: { incrementUsage: vi.fn(), createRedemption: vi.fn() },
+  couponRepository: { consumeUsage: vi.fn(async () => true), createRedemption: vi.fn() },
 }));
 
 vi.mock('@/server/repositories/operations.repository', () => ({
@@ -69,7 +69,7 @@ const incrementSoldCount = vi.mocked(orderRepository.incrementProductSoldCount);
 const counterNext = vi.mocked(counterRepository.next);
 const upsertByPhone = vi.mocked(customerRepository.upsertByPhone);
 const recordOrder = vi.mocked(customerRepository.recordOrder);
-const incrementCouponUsage = vi.mocked(couponRepository.incrementUsage);
+const consumeCouponUsage = vi.mocked(couponRepository.consumeUsage);
 const createRedemption = vi.mocked(couponRepository.createRedemption);
 const findCommuneById = vi.mocked(communeRepository.findById);
 const findPaymentMethodById = vi.mocked(paymentMethodRepository.findById);
@@ -236,7 +236,7 @@ describe('placeOrder — happy path (pickup)', () => {
 
   it('never touches coupon redemption when no coupon was applied', async () => {
     await placeOrder(baseInput({ cashGiven: 10000 }));
-    expect(incrementCouponUsage).not.toHaveBeenCalled();
+    expect(consumeCouponUsage).not.toHaveBeenCalled();
     expect(createRedemption).not.toHaveBeenCalled();
   });
 
@@ -287,11 +287,25 @@ describe('placeOrder — coupons', () => {
     mockedPriceCart.mockResolvedValue(
       pricedCart({ couponId: 'coupon-1', couponDiscount: 1000, total: 7000 }),
     );
+    consumeCouponUsage.mockResolvedValue(true);
     await placeOrder(baseInput({ cart: { items: [], couponCode: 'PROMO' } }));
-    expect(incrementCouponUsage).toHaveBeenCalledWith('coupon-1', expect.anything());
+    expect(consumeCouponUsage).toHaveBeenCalledWith('coupon-1', expect.anything());
     expect(createRedemption).toHaveBeenCalledWith(
       expect.objectContaining({ discountAmount: 1000, customerId: 'customer-1' }),
       expect.anything(),
     );
+  });
+
+  it('aborts the order when the coupon ran out between the quote and the write', async () => {
+    findPaymentMethodById.mockResolvedValue(cardMethod as never);
+    mockedPriceCart.mockResolvedValue(
+      pricedCart({ couponId: 'coupon-1', couponDiscount: 1000, total: 7000 }),
+    );
+    consumeCouponUsage.mockResolvedValue(false);
+
+    await expect(
+      placeOrder(baseInput({ cart: { items: [], couponCode: 'PROMO' } })),
+    ).rejects.toThrow(BusinessRuleError);
+    expect(createRedemption).not.toHaveBeenCalled();
   });
 });

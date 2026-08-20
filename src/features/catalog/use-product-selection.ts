@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 
 import { useCartStore } from '@/features/cart/cart-store';
+import { notifyCartFull } from '@/features/cart/cart-limits';
 import {
   initialSelection,
   selectionPrice,
@@ -104,7 +105,7 @@ export function useProductSelection(product: ProductView) {
   function addToCart() {
     if (!canAdd) return;
 
-    addLine({
+    const added = addLine({
       productId: product.id,
       name: product.name,
       image: product.image,
@@ -127,6 +128,14 @@ export function useProductSelection(product: ProductView) {
       removedIngredientIds: [],
       removedIngredientNames: [],
     });
+
+    // El carrito tiene el mismo tope que el server. Se avisa acá en vez de
+    // deshabilitar el botón: el tope es un caso extremo y un cartel bajo cada
+    // tarjeta de la grilla sería ruido permanente para nadie.
+    if (!added) {
+      notifyCartFull();
+      return;
+    }
 
     // El control se reusa para el siguiente pedido del mismo producto; dejar los
     // agregados marcados cobraría la segunda pizza como la primera.

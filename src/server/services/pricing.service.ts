@@ -6,8 +6,11 @@ import { communeRepository, settingsRepository } from '@/server/repositories/ope
 import { nonNegative, percentageOf, sumMoney } from '@/lib/money';
 import { bundleDiscount, type BundleUnit } from '@/lib/bundle-promo';
 import { resolveExtraPrice, type SizeExtraPricing } from '@/lib/extra-price';
-import { BusinessRuleError, NotFoundError } from '@/lib/errors';
+import { BusinessRuleError, CouponError, NotFoundError } from '@/lib/errors';
 import type { CartItemInput } from '@/schemas/cart.schema';
+
+/** Inferred from the repository so the service never imports a Prisma type. */
+type LoadedCoupon = NonNullable<Awaited<ReturnType<typeof couponRepository.findByCode>>>;
 
 export type PricedExtra = {
   extraId: string;
@@ -254,11 +257,14 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
   }
 
   // --- Coupon -----------------------------------------------------------
-  let couponDiscount = 0;
-  let couponId: string | null = null;
+  // Validated here but *applied* further down: promotion and coupon are
+  // mutually exclusive and the waived delivery counts as part of what the
+  // coupon is worth, so the winner can only be decided once the fee is known.
+  let coupon: LoadedCoupon | null = null;
+  let rawCouponDiscount = 0;
 
   if (input.couponCode) {
-    const coupon = await couponRepository.findByCode(input.couponCode);
+    coupon = await couponRepository.findByCode(input.couponCode);
     const now = new Date();
 
     if (
@@ -269,39 +275,62 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
       subtotal < coupon.minSubtotal ||
       (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit)
     ) {
-      throw new BusinessRuleError('El cupón no es válido o ha expirado.');
+      throw new CouponError('El cupón no es válido o ha expirado.');
     }
 
     if (input.customerId) {
       const used = await couponRepository.countCustomerRedemptions(coupon.id, input.customerId);
       if (used >= coupon.perCustomerLimit) {
-        throw new BusinessRuleError('Ya has usado este cupón el máximo de veces permitido.');
+        throw new CouponError('Ya has usado este cupón el máximo de veces permitido.');
       }
     }
 
     const raw =
       coupon.discountType === 'PERCENTAGE' ? percentageOf(subtotal, coupon.value) : coupon.value;
-    couponDiscount = nonNegative(coupon.maxDiscount ? Math.min(raw, coupon.maxDiscount) : raw);
-    couponId = coupon.id;
-
-    if (coupon.freeDelivery) {
-      deliveryFee = 0;
-      deliveryFeeMax = 0;
-    }
+    rawCouponDiscount = nonNegative(coupon.maxDiscount ? Math.min(raw, coupon.maxDiscount) : raw);
   }
 
-  const discount = Math.max(promotionDiscount, couponDiscount);
-  const usingPromotion = promotionDiscount >= couponDiscount;
+  // The waived fee is part of the coupon's value. Without counting it,
+  // `ENVIOGRATIS` — a FIXED coupon of 0 whose only effect is `freeDelivery` —
+  // scored 0, tied against "no promotion at all" and lost, so the order went
+  // out with free delivery while `couponId` came back null: no redemption row,
+  // no `usageCount`, `perCustomerLimit` unenforceable, discount infinite.
+  const waivedDelivery = coupon?.freeDelivery ? deliveryFee : 0;
+  const couponValue = rawCouponDiscount + waivedDelivery;
 
-  const total = nonNegative(subtotal - discount + deliveryFee);
+  // A coupon worth nothing on this cart is not swallowed in silence: it would
+  // burn a redemption and hand the customer back zero. Say why instead.
+  if (coupon && couponValue === 0) {
+    throw new CouponError(
+      coupon.freeDelivery && input.orderType === 'PICKUP'
+        ? 'Este cupón solo aplica a pedidos con despacho.'
+        : 'Este cupón no agrega un descuento a este pedido.',
+    );
+  }
+
+  // Strictly greater: on a tie the customer pays the same either way, so the
+  // promotion takes it and the coupon stays unspent for a cart where it wins.
+  const appliedCoupon = coupon !== null && couponValue > promotionDiscount ? coupon : null;
+
+  if (appliedCoupon?.freeDelivery) {
+    deliveryFee = 0;
+    deliveryFeeMax = 0;
+  }
+
+  const appliedPromotionDiscount = appliedCoupon ? 0 : promotionDiscount;
+  const appliedCouponDiscount = appliedCoupon ? rawCouponDiscount : 0;
+
+  const total = nonNegative(
+    subtotal - appliedPromotionDiscount - appliedCouponDiscount + deliveryFee,
+  );
 
   return {
     items,
     subtotal,
-    promotionDiscount: usingPromotion ? discount : 0,
-    promotionId: usingPromotion ? promotionId : null,
-    couponDiscount: !usingPromotion ? discount : 0,
-    couponId: !usingPromotion ? couponId : null,
+    promotionDiscount: appliedPromotionDiscount,
+    promotionId: appliedCoupon ? null : promotionId,
+    couponDiscount: appliedCouponDiscount,
+    couponId: appliedCoupon?.id ?? null,
     deliveryFee,
     deliveryFeeMin: deliveryFee,
     deliveryFeeMax,

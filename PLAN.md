@@ -1870,6 +1870,265 @@ esta es la misma trampa al revés.
 **Sin verificar en navegador**: no hay Chromium en la máquina. Falta la pasada
 visual a 360px/768px/1280px, light y dark, y el recorrido con teclado.
 
+## El cupón de envío gratis se regalaba sin registrarse (2026-08-15)
+
+Fase 1 de tres para poder crear cupones y mostrarlos (2 = CRUD en `/admin`,
+3 = exposición en la landing y el carrito). Antes de dejar que el operador
+cree cupones había que arreglar el motor: cualquier cupón nuevo salía con los
+mismos agujeros.
+
+**El bug.** `pricing.service.ts` desempataba promoción contra cupón por monto:
+`usingPromotion = promotionDiscount >= couponDiscount`. `ENVIOGRATIS` (sembrado
+y activo) es un `FIXED` de **valor 0** cuyo único efecto es `freeDelivery`, así
+que puntuaba 0, empataba contra «ninguna promoción» y perdía. Resultado: el
+pedido salía con el despacho en $0 y `couponId` en `null`. Sin `couponId` no
+hay fila en `coupon_redemptions`, no sube `usageCount` y `perCustomerLimit: 3`
+no significa nada. Despacho gratis ilimitado, sin una sola fila que lo diga.
+
+**Arreglo.** El flete perdonado ahora es parte de lo que vale el cupón:
+`couponValue = descuento + (freeDelivery ? deliveryFee : 0)`, y con eso se
+decide **un** ganador. El `freeDelivery` se aplica después de decidir, no antes
+—antes, un cupón que perdía el descuento se quedaba igual con el envío gratis,
+beneficio doble y sin traza.
+
+**Empate.** Gana la promoción (`>` estricto, no `>=`): el cliente paga lo mismo
+y el cupón queda sin gastar para un carrito donde sí gane.
+
+**Cupón que no vale nada.** Antes se lo tragaba en silencio. Ahora lanza
+`CouponError`: «solo aplica a pedidos con despacho» en retiro, genérico si el
+flete ya era gratis por `freeDeliveryFrom`. Gastar una redención a cambio de
+cero es peor que decir que no.
+
+**`perCustomerLimit` nunca corrió.** La rama existía pero dependía de
+`input.customerId`, y nadie lo pasaba: `checkout.service` llamaba a
+`getCurrentCustomer()` _después_ de `priceCart`. Se subió la sesión por encima
+de la cotización. Sigue sin aplicar a invitados —el guest checkout no se toca,
+es regla del proyecto— así que el límite es por cuenta, no por persona.
+
+**`usageLimit` era orientativo.** Se leía al cotizar y se incrementaba al
+confirmar, con una ventana en medio. `incrementUsage` pasó a `consumeUsage`:
+un solo `updateMany` con `usageCount < usageLimit` en el `where` (field
+reference de Prisma; la rama `usageLimit: null` va aparte porque
+`usageCount < NULL` es NULL, nunca true). Devuelve `false` si el cupón se
+agotó y `placeOrder` tira la transacción entera abajo. Verificado contra el
+Postgres real dentro de una transacción abortada: agotado → 0 filas,
+ilimitado → 1, con cupo → 1.
+
+**Consecuencia asumida.** El motor ahora rechaza cupones en más casos, y el
+código vive en `localStorage`: un rechazo dejaba el carrito sin poder pagar
+para siempre. Por eso `CouponError` tiene código propio (`COUPON_INVALID`) y
+no es un `BusinessRuleError` cualquiera — el checkout borra el código sólo
+ante ese código y deja el motivo en pantalla. Se agregó además el estado
+«cupón X aplicado» con botón «Quitar», que era de la fase 3.
+
+**Tradeoff.** Un cupón `freeDelivery` y una promoción grande ya no se suman:
+el cliente se lleva el mayor de los dos, no los dos. Es la regla que el código
+decía tener y no cumplía.
+
+**Verificado.** `npx tsc --noEmit`, `npm run lint` y las 253 pruebas unitarias
+en verde (20 archivos), con 5 casos nuevos: envío gratis aplicado y
+registrado, retiro rechazado, promoción que gana sin regalar el flete,
+`perCustomerLimit` con cliente conocido, y cupón agotado que aborta el pedido.
+**Sin build ni navegador**: no se corrió `npm run build` ni hay Chromium acá.
+
+## Cupones desde el panel (2026-08-15)
+
+Fase 2 de tres. La fase 1 dejó el motor confiable; acá el operador puede crear
+un cupón sin `psql`. Falta la 3: mostrarlos en la landing.
+
+**Por qué no existía.** `couponRepository` ya tenía `create/update/delete`
+desde el principio, sin una sola action ni pantalla que los llamara: código
+muerto. Los dos cupones vivos (`BIENVENIDA10`, `ENVIOGRATIS`) los puso el seed.
+
+**Capas.** `coupon.schema.ts` (zod) → `coupon.actions.ts`
+(`createCouponAction`, `setCouponActiveAction`, ambas con `assertAdmin` y
+`ActionResult<string>`) → `couponRepository.createFromAdmin` / `setActive`.
+`createFromAdmin` toma el tipo del schema, no `Prisma.CouponCreateInput`: la
+action no importa tipos de Prisma y la forma la manda el formulario validado.
+
+**`assertAdmin` se mudó** a `lib/auth/admin-session.ts`. Estaba privada dentro
+de `admin.actions.ts`, que es `'use server'`: exportarla desde ahí la habría
+publicado como endpoint. Ahora la comparten los dos archivos de acciones.
+
+**Lo que el schema no deja crear.** Porcentaje fuera de 1–100. Un `FIXED` de $0
+sin envío gratis —exactamente el cupón que rompía el motor en la fase 1: se
+crea, se acepta y no descuenta nada—. Un tope sobre un monto fijo, que no
+significa nada. Un cupón con fecha de término ya pasada. Código con espacios:
+es lo que alguien va a dictar por teléfono.
+
+**No hay borrar, sólo activar/desactivar.** `coupon_redemptions` referencia la
+fila con `onDelete: Cascade`: borrar un cupón se lleva el historial de quién lo
+usó. Es la misma decisión que ya había tomado el seed con `BIENVENIDA10`
+(«retirado» es una bandera, no un `DELETE`).
+
+**Zona horaria.** `<input type="date">` da `YYYY-MM-DD` y el proceso corre en
+UTC (`TZ` sigue sin fijarse en pm2), así que un «vence el 20» ingenuo moría a
+las 19:59 de Paine. `endOfDayInShopTime()` lo resuelve explícito contra
+`SHOP_TIME_ZONE`, igual que `schedule.service` resuelve el día de la semana, y
+la fila del panel formatea la fecha con el mismo `timeZone`. Verificado en
+agosto (UTC-4) y en diciembre (UTC-3, horario de verano): las dos dan 23:59:59
+de Paine y el panel anuncia el día correcto.
+
+**UI.** Sección nueva en `/admin`, columna ancha, debajo de Zonas. Lista
+primero —lo que se mira a diario es qué cupones andan dando vueltas—, alta
+después. Cada fila muestra qué entrega en una línea (un `FIXED` de $0 con envío
+gratis se lee «Envío gratis», no «$0 + envío gratis»), los usos contra el
+límite, y avisa **Agotado** o **Vencido** en un cupón todavía activo: sin eso
+el operador lo dicta por teléfono y se entera recién cuando el cliente reclama.
+Todo server component salvo la frontera que ya traía `AdminForm`; el `<select>`
+de tipo es nativo, no el de Radix, porque no hay una sola interacción que
+justifique el JS.
+
+**Tradeoff.** El formulario tiene nueve campos y no dos. Un cupón se crea una
+vez por campaña, no con las manos en la masa, y esconder `usageLimit` o el tope
+del porcentaje es justo lo que deja regalar el local por un cero de más.
+
+**Verificado.** `tsc`, `lint`, `format:check` y 267 pruebas unitarias en verde
+(21 archivos), con 14 casos nuevos de schema. Alta, toggle, listado e índice
+único probados contra el Postgres real dentro de una transacción abortada
+(código repetido → `P2002`); la base quedó con sus dos cupones de siempre.
+**Sin build, sin navegador y sin test de integración**: no hay Chromium, y
+`.env.test` no existe en esta máquina, así que las actions no se ejercitaron
+end to end.
+
+## El carrito crecía sin freno (2026-08-17)
+
+**Problema del cliente**: el `+` del carrito y el botón «Agregar» no tenían
+tope. `cartSchema` sí: 50 por línea, 60 líneas, 20 agregados. El cliente podía
+armar un carrito que el server iba a rechazar y se enteraba recién al
+confirmar, con el pedido ya cargado. Rompe honestidad de estado.
+
+**Capas tocadas**: schema + store cliente + UI (carrito, grilla, ficha,
+promos).
+
+- `src/schemas/cart.schema.ts` — los topes salen a constantes exportadas
+  (`MAX_LINE_QUANTITY`, `MAX_CART_LINES`, `MAX_EXTRA_QUANTITY`). El server
+  sigue siendo la autoridad; el cliente ahora puede leer el mismo número en vez
+  de repetirlo a mano.
+- `src/features/cart/cart-store.ts` — `addLine` devuelve `boolean` y rechaza
+  con el carrito lleno; recorta la cantidad de la línea nueva. `setQuantity`
+  clampea al tope. `merge` del `persist` recorta lo que venga de
+  `localStorage`: es editable a mano y además puede traer un carrito guardado
+  antes de que existieran los topes.
+- `src/features/cart/cart-limits.ts` (nuevo) — `notifyCartFull()`, un solo
+  texto para los tres lugares que lo disparan.
+- `src/features/cart/cart-drawer.tsx` — el `+` se deshabilita en el tope y
+  aparece el motivo abajo de la línea.
+- `use-product-selection.ts`, `combo-builder.tsx` — avisan por toast si la
+  línea no entró. El combo deja el panel abierto con la selección intacta.
+- `duo-builder.tsx` — chequea el espacio **antes** de agregar nada: media promo
+  se cobraría a precio de carta, porque el descuento lo da `pricing.service` al
+  reconocer el par.
+
+**Tradeoff**: en la grilla el tope avisa por toast en vez de deshabilitar el
+botón. Deshabilitar exigiría un cartel bajo cada tarjeta explicando el motivo
+—regla de estado deshabilitado— y sería ruido permanente por un caso que casi
+nadie va a ver. El tope de líneas es un techo real, no un mensaje de venta.
+
+**Lo que no se tocó**: el `Math.min(20, ...)` del stepper de la ficha
+(`product-buy-panel.tsx:161`) es un tope distinto —por _agregada_, no por
+línea— y sigue en 20. Y el carrito grande **no** sobrecarga el server: al
+server viajan ids y cantidades. La carga real está en las queries de
+`pricing.service` por ítem; eso queda anotado, sin tocar.
+
+`tsc`, `lint` y los 271 tests en verde (4 nuevos en `cart-store.test.ts`). Sin
+build ni navegador: producción está sirviendo en 3006.
+
+## Las imágenes tardaban segundos: AVIF en 2 vCPU (2026-08-17)
+
+**Problema del cliente**: las fotos de la carta aparecían tarde. Medido contra
+producción (`10.10.10.12:3006`), cache frío:
+
+```
+mechada  w=1080  4.83s   186KB  image/avif
+mechada  w=1080  0.03s   186KB  (warm)
+```
+
+No era la red ni el tamaño de los archivos. Era el **encoder**. Benchmark de
+`sharp` en esta máquina (2 vCPU, LXC):
+
+```
+mechada  avif  13802ms  313KB
+mechada  webp    402ms  181KB
+pepperoni avif  7837ms  167KB
+pepperoni webp   282ms  111KB
+```
+
+AVIF cuesta ~34x más CPU y el archivo **no** sale más chico. `next/image`
+optimiza on demand, así que ese costo lo paga el primer visitante de cada
+tamaño — y `.next/cache/images` se borra en cada deploy (`rm -rf .next`), así
+que el cache vuelve a estar frío después de cada release.
+
+- `next.config.ts` — `formats: ['image/webp']`. AVIF fuera.
+
+**Tradeoff**: los browsers que soportan AVIF ya no lo reciben. En papel es
+perder compresión; acá se midió que no la había. Si algún día el sitio corre en
+hardware con CPU de sobra, esto se revisa.
+
+**Pendiente, no hecho**: (1) el deploy borra `.next/cache/images` — conviene
+preservar `.next/cache` entre builds o precalentar con curl después del
+restart; (2) `public/menu/mechada.jpg` es 1200x1450 y 432KB, el más grande de
+los nueve y el más lento de codificar: ninguna vista pide 1450px de alto.
+Requiere rebuild + restart de pm2 para que el cambio de formato tenga efecto.
+
+## Gestión de cupones completa: editar + banner público (2026-08-20)
+
+Cerraba la fase 3 pendiente desde el 2026-08-15. `/admin` ya tenía alta y
+activar/desactivar (sin commitear); faltaba editar un cupón existente y que
+`isPublic` significara algo — se guardaba y se veía en el panel
+(`coupon-row.tsx`, badge "En la web") pero ningún componente del storefront lo
+leía.
+
+**Editar.** `couponRepository.updateFromAdmin(id, input)`, mismo shape que
+`createFromAdmin` pero sin tocar `startsAt` (un cupón no se reprograma, se crea
+uno nuevo) ni `usageCount` (derivado; editarlo permitiría resetear el abuso).
+El parseo de `createCouponAction` se extrajo a `parseCouponForm()`, compartido
+con el nuevo `updateCouponAction`. El chequeo de código duplicado ahora deja
+pasar el propio id (`existing.id !== couponId`), si no ni guardar sin tocar el
+código tiraba `ConflictError`.
+
+`coupon-fields.tsx`: `NewCouponFields` pasó a `CouponFields({ coupon? })`, con
+`defaultValue` por campo cuando hay cupón. `NewCouponFields` queda como alias
+sin argumento para no tocar el call site de alta. Fecha de vencimiento
+necesitó el inverso de `endOfDayInShopTime`:
+`toShopDateInputValue()` (`Intl.DateTimeFormat('en-CA', ...)`) vuelca el `Date`
+guardado al `YYYY-MM-DD` de Paine que espera el input — sin la timezone
+explícita, el formulario podía mostrar un día antes o después según la hora
+del server (mismo problema de fondo que `dayOfWeekInShopTime`).
+
+`coupon-row.tsx`: `<details>` nativo ("Editar", cero JS) con un segundo
+`AdminForm`, sibling del toggle que ya existía en la fila — no un `<form>`
+anidado. `describeDiscount` (local) salió a `src/lib/coupon-copy.ts` como
+`describeCouponBenefit()`, puro: lo necesitaba también el banner público, y
+dos copias del mismo texto se habrían desincronizado (mismo criterio que
+`bundle-promo.ts`/`extra-price.ts`).
+
+**Banner público.** `couponRepository.findPublicActive()`: `findFirst`
+(un solo banner, mismo criterio que `findFeaturedBundle`) sobre `isActive` +
+`isPublic` + vigencia + cupo no agotado — sin el chequeo de cupo el banner
+podría anunciar un código que `priceCart` ya rechaza. `select` estrecho: sólo
+lo que pinta el banner.
+
+`coupon-banner.tsx` (server) + `apply-coupon-button.tsx` (única frontera
+cliente: aplica el código con `useCartStore.getState().setCoupon()` — mismo
+mecanismo que `checkout-form.tsx` — y lo copia al portapapeles). Franja
+delgada estilo `TrustBar` (`bg-secondary/40`, no un bloque `bg-primary`): ese
+acento ya lo llevan `DuoPromoCard` y `ComboPromoCard` un scroll más abajo, y un
+tercer bloque con el mismo peso rompía la regla de un solo elemento dominante
+por pantalla. Insertado en `page.tsx` entre `TrustBar` y `DuoPromoCard`, mismo
+lugar que el `CouponBanner` original del 2026-08-03.
+
+**Verificado.** `npx tsc --noEmit`, `npm run lint`, `npm run format:check` y
+`npx vitest run` (271 tests) limpios. Sin tests nuevos: `updateCouponAction`
+reusa `createCouponSchema` sin ramas de validación distintas a las que ya
+cubre `coupon.schema.test.ts`.
+
+**Sin verificar en navegador ni build**: no hay Chromium en la máquina y no se
+corrió `npm run build` (dev/prod discipline). Falta la pasada manual: crear
+cupón → editarlo → confirmar que persiste; y en `/`, que un cupón público
+aparezca y uno vencido/agotado/privado no. Sigue sin commitear, junto con el
+resto de la fase 2 (alta + toggle) que ya estaba en el working tree.
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.

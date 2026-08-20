@@ -67,7 +67,11 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['pino', 'pino-pretty'],
 
   images: {
-    formats: ['image/avif', 'image/webp'],
+    // Solo WebP. AVIF salió medido en esta máquina (2 vCPU, LXC): codificar
+    // `mechada.jpg` a 1080px tarda 13.8s en AVIF contra 402ms en WebP —34x— y
+    // el archivo resultante no es más chico (313KB vs 181KB). El costo lo paga
+    // el primer visitante con el cache frío, o sea después de cada deploy.
+    formats: ['image/webp'],
     deviceSizes: [360, 480, 640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     // Solo assets propios: `public/` y el blob store al que sube el admin.

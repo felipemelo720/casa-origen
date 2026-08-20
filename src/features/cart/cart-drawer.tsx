@@ -18,6 +18,7 @@ import {
 } from '@/lib/bundle-promo';
 import { cn } from '@/lib/utils';
 import { estimateLineTotal, useCartStore, type CartLine } from '@/features/cart/cart-store';
+import { MAX_LINE_QUANTITY } from '@/schemas/cart.schema';
 import { CheckoutForm, type CheckoutOptions } from '@/features/checkout/checkout-form';
 import { QueryProvider } from '@/components/providers/query-provider';
 
@@ -318,6 +319,7 @@ export function CartDrawer({
                             variant="ghost"
                             size="icon-xs"
                             onClick={() => setQuantity(line.cartItemId, line.quantity + 1)}
+                            disabled={line.quantity >= MAX_LINE_QUANTITY}
                             aria-label="Aumentar cantidad"
                           >
                             <Plus className="size-3" />
@@ -327,6 +329,13 @@ export function CartDrawer({
                           {formatMoney(estimateLineTotal(line))}
                         </span>
                       </div>
+                      {/* El tope explica el motivo donde molesta: si no, el `+`
+                          queda muerto sin razón visible. */}
+                      {line.quantity >= MAX_LINE_QUANTITY && (
+                        <p className="text-muted-foreground mt-1 text-[11px]">
+                          Máximo {MAX_LINE_QUANTITY} por línea. Para más, llámanos y lo coordinamos.
+                        </p>
+                      )}
                     </div>
                     <Button
                       variant="ghost"

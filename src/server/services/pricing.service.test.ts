@@ -23,7 +23,7 @@ import { priceCart } from './pricing.service';
 import { productRepository } from '@/server/repositories/product.repository';
 import { promotionRepository, couponRepository } from '@/server/repositories/promotion.repository';
 import { communeRepository, settingsRepository } from '@/server/repositories/operations.repository';
-import { BusinessRuleError, NotFoundError } from '@/lib/errors';
+import { BusinessRuleError, CouponError, NotFoundError } from '@/lib/errors';
 import type { CartItemInput } from '@/schemas/cart.schema';
 
 const findForPricing = vi.mocked(productRepository.findForPricing);
@@ -725,11 +725,30 @@ describe('priceCart — delivery', () => {
 });
 
 describe('priceCart — coupons', () => {
+  /** Coupon row with everything switched off but validity. */
+  function baseCoupon(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'coupon-1',
+      isActive: true,
+      startsAt: new Date('2020-01-01'),
+      endsAt: null,
+      minSubtotal: 0,
+      usageLimit: null,
+      usageCount: 0,
+      perCustomerLimit: 1,
+      discountType: 'FIXED',
+      value: 0,
+      maxDiscount: null,
+      freeDelivery: false,
+      ...overrides,
+    } as never;
+  }
+
   it('rejects an unknown or expired coupon code', async () => {
     findCouponByCode.mockResolvedValue(null);
     await expect(
       priceCart({ items: [baseItem()], orderType: 'PICKUP', couponCode: 'NOPE' }),
-    ).rejects.toThrow(BusinessRuleError);
+    ).rejects.toThrow(CouponError);
   });
 
   it('keeps only the larger of promotion vs. coupon discount', async () => {
@@ -770,5 +789,81 @@ describe('priceCart — coupons', () => {
     expect(result.couponId).toBe('coupon-1');
     expect(result.promotionDiscount).toBe(0);
     expect(result.total).toBe(5000);
+  });
+
+  // The bug this suite exists for: a coupon whose only effect is the waived fee
+  // used to zero the delivery and still come back with `couponId: null`, so the
+  // order recorded no redemption and the usage limits never applied.
+  it('applies a free-delivery coupon and reports which coupon did it', async () => {
+    findCouponByCode.mockResolvedValue(baseCoupon({ freeDelivery: true }));
+    findCommuneById.mockResolvedValue(zone());
+    countCustomerRedemptions.mockResolvedValue(0);
+
+    const result = await priceCart({
+      items: [baseItem()],
+      orderType: 'DELIVERY',
+      communeId: 'commune-1',
+      couponCode: 'ENVIOGRATIS',
+    });
+
+    expect(result.couponId).toBe('coupon-1');
+    expect(result.deliveryFee).toBe(0);
+    expect(result.deliveryFeeMax).toBe(0);
+    expect(result.total).toBe(8000);
+  });
+
+  it('rejects a free-delivery coupon on a pickup order instead of eating it', async () => {
+    findCouponByCode.mockResolvedValue(baseCoupon({ freeDelivery: true }));
+    countCustomerRedemptions.mockResolvedValue(0);
+
+    await expect(
+      priceCart({ items: [baseItem()], orderType: 'PICKUP', couponCode: 'ENVIOGRATIS' }),
+    ).rejects.toThrow(CouponError);
+  });
+
+  it('does not waive the fee when the promotion beats the coupon', async () => {
+    findActivePromotions.mockResolvedValue([
+      {
+        id: 'promo-1',
+        scope: 'ALL',
+        minSubtotal: 0,
+        discountType: 'FIXED',
+        value: 5000,
+        maxDiscount: null,
+        categories: [],
+        products: [],
+      },
+    ] as never);
+    findCouponByCode.mockResolvedValue(baseCoupon({ freeDelivery: true }));
+    findCommuneById.mockResolvedValue(zone());
+    countCustomerRedemptions.mockResolvedValue(0);
+
+    const result = await priceCart({
+      items: [baseItem()],
+      orderType: 'DELIVERY',
+      communeId: 'commune-1',
+      couponCode: 'ENVIOGRATIS',
+    });
+
+    // The promotion is worth 5.000 against the coupon's 1.500 of freight, so
+    // the coupon loses entirely — the free delivery does not come along for free.
+    expect(result.promotionId).toBe('promo-1');
+    expect(result.couponId).toBeNull();
+    expect(result.deliveryFee).toBe(1500);
+    expect(result.total).toBe(4500);
+  });
+
+  it('enforces perCustomerLimit once a customer is known', async () => {
+    findCouponByCode.mockResolvedValue(baseCoupon({ value: 2000, perCustomerLimit: 1 }));
+    countCustomerRedemptions.mockResolvedValue(1);
+
+    await expect(
+      priceCart({
+        items: [baseItem()],
+        orderType: 'PICKUP',
+        couponCode: 'REPETIDO',
+        customerId: 'cus-1',
+      }),
+    ).rejects.toThrow(CouponError);
   });
 });
