@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { describeCouponBenefit } from '@/lib/coupon-copy';
 import { ErrorCode } from '@/lib/errors';
 import { formatMoney, formatMoneyRange } from '@/lib/money';
 import { estimateLineTotal, toCartItemInput, useCartStore } from '@/features/cart/cart-store';
@@ -445,6 +446,16 @@ export function CheckoutForm({
             <span className="text-muted-foreground">Subtotal</span>
             <span>{formatMoney(preview?.subtotal ?? subtotal)}</span>
           </div>
+          {/* Nombra el cupón y dice qué hace, no sólo cuánto resta: un
+              "-$2.720" suelto no dice si viene del cupón que se acaba de
+              tipear o de una promo automática, y ENVIOGRATIS no mueve esta
+              cifra en absoluto (su efecto es el despacho, más abajo). */}
+          {preview?.appliedCoupon && (
+            <p className="text-success text-xs">
+              Cupón <span className="font-medium">{preview.appliedCoupon.code}</span> aplicado:{' '}
+              {describeCouponBenefit(preview.appliedCoupon)}.
+            </p>
+          )}
           {preview && preview.discount > 0 && (
             <div className="text-success flex justify-between">
               <span>Descuento</span>
@@ -455,7 +466,11 @@ export function CheckoutForm({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Despacho</span>
               <span>
-                {preview ? formatMoneyRange(preview.deliveryFeeMin, preview.deliveryFeeMax) : '—'}
+                {preview
+                  ? preview.appliedCoupon?.freeDelivery
+                    ? 'Gratis'
+                    : formatMoneyRange(preview.deliveryFeeMin, preview.deliveryFeeMax)
+                  : '—'}
               </span>
             </div>
           )}

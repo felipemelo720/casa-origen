@@ -96,6 +96,7 @@ function pricedCart(overrides: Partial<PricedCart> = {}): PricedCart {
     promotionId: null,
     couponDiscount: 0,
     couponId: null,
+    appliedCoupon: null,
     deliveryFee: 0,
     deliveryFeeMin: 0,
     deliveryFeeMax: 0,

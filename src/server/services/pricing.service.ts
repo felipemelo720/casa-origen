@@ -6,6 +6,7 @@ import { communeRepository, settingsRepository } from '@/server/repositories/ope
 import { nonNegative, percentageOf, sumMoney } from '@/lib/money';
 import { bundleDiscount, type BundleUnit } from '@/lib/bundle-promo';
 import { resolveExtraPrice, type SizeExtraPricing } from '@/lib/extra-price';
+import type { CouponBenefitInput } from '@/lib/coupon-copy';
 import { BusinessRuleError, CouponError, NotFoundError } from '@/lib/errors';
 import type { CartItemInput } from '@/schemas/cart.schema';
 
@@ -47,6 +48,16 @@ export type PricedCart = {
   promotionId: string | null;
   couponDiscount: number;
   couponId: string | null;
+  /**
+   * The coupon that actually won the slot, narrow enough for the checkout
+   * summary to name it and describe its benefit (`describeCouponBenefit`)
+   * without a second query. `null` when no coupon applied — a promotion
+   * discount still surfaces through `promotionDiscount`/`promotionId` only.
+   * Present even when the coupon's only effect is `freeDelivery` (its
+   * `couponDiscount` can be 0), so the checkout can still say *why* delivery
+   * shows as free instead of a bare $0.
+   */
+  appliedCoupon: (CouponBenefitInput & { code: string }) | null;
   deliveryFee: number;
   /**
    * The band the zone is advertised at. `deliveryFee` is what the total
@@ -331,6 +342,16 @@ export async function priceCart(input: CheckoutPricingInput): Promise<PricedCart
     promotionId: appliedCoupon ? null : promotionId,
     couponDiscount: appliedCouponDiscount,
     couponId: appliedCoupon?.id ?? null,
+    appliedCoupon: appliedCoupon
+      ? {
+          code: appliedCoupon.code,
+          discountType: appliedCoupon.discountType,
+          value: appliedCoupon.value,
+          maxDiscount: appliedCoupon.maxDiscount,
+          freeDelivery: appliedCoupon.freeDelivery,
+          minSubtotal: appliedCoupon.minSubtotal,
+        }
+      : null,
     deliveryFee,
     deliveryFeeMin: deliveryFee,
     deliveryFeeMax,

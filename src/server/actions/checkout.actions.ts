@@ -54,6 +54,10 @@ export const previewCartTotalsAction = publicAction(
       deliveryFeeMin: priced.deliveryFeeMin,
       deliveryFeeMax: priced.deliveryFeeMax,
       total: priced.total,
+      // So the checkout can name the coupon and describe its benefit instead
+      // of a bare "Descuento" — the customer typed a code, they should see
+      // what it actually did.
+      appliedCoupon: priced.appliedCoupon,
       items: priced.items.map((item) => ({
         cartItemId: item.cartItemId,
         unitPrice: item.unitPrice,

@@ -729,6 +729,7 @@ describe('priceCart — coupons', () => {
   function baseCoupon(overrides: Record<string, unknown> = {}) {
     return {
       id: 'coupon-1',
+      code: 'BASE10',
       isActive: true,
       startsAt: new Date('2020-01-01'),
       endsAt: null,
@@ -766,6 +767,7 @@ describe('priceCart — coupons', () => {
     ] as never);
     findCouponByCode.mockResolvedValue({
       id: 'coupon-1',
+      code: 'BIGGER',
       isActive: true,
       startsAt: new Date('2020-01-01'),
       endsAt: null,
@@ -789,13 +791,23 @@ describe('priceCart — coupons', () => {
     expect(result.couponId).toBe('coupon-1');
     expect(result.promotionDiscount).toBe(0);
     expect(result.total).toBe(5000);
+    // The checkout summary names the coupon and describes its benefit from
+    // this object — it has to carry the code, not just the id.
+    expect(result.appliedCoupon).toEqual({
+      code: 'BIGGER',
+      discountType: 'FIXED',
+      value: 3000,
+      maxDiscount: null,
+      freeDelivery: false,
+      minSubtotal: 0,
+    });
   });
 
   // The bug this suite exists for: a coupon whose only effect is the waived fee
   // used to zero the delivery and still come back with `couponId: null`, so the
   // order recorded no redemption and the usage limits never applied.
   it('applies a free-delivery coupon and reports which coupon did it', async () => {
-    findCouponByCode.mockResolvedValue(baseCoupon({ freeDelivery: true }));
+    findCouponByCode.mockResolvedValue(baseCoupon({ code: 'ENVIOGRATIS', freeDelivery: true }));
     findCommuneById.mockResolvedValue(zone());
     countCustomerRedemptions.mockResolvedValue(0);
 
@@ -810,6 +822,9 @@ describe('priceCart — coupons', () => {
     expect(result.deliveryFee).toBe(0);
     expect(result.deliveryFeeMax).toBe(0);
     expect(result.total).toBe(8000);
+    // `couponDiscount` stays 0 here (the coupon's only effect is the waived
+    // fee) — the checkout still needs to say *why* delivery reads "Gratis".
+    expect(result.appliedCoupon).toMatchObject({ code: 'ENVIOGRATIS', freeDelivery: true });
   });
 
   it('rejects a free-delivery coupon on a pickup order instead of eating it', async () => {
@@ -849,6 +864,7 @@ describe('priceCart — coupons', () => {
     // the coupon loses entirely — the free delivery does not come along for free.
     expect(result.promotionId).toBe('promo-1');
     expect(result.couponId).toBeNull();
+    expect(result.appliedCoupon).toBeNull();
     expect(result.deliveryFee).toBe(1500);
     expect(result.total).toBe(4500);
   });
