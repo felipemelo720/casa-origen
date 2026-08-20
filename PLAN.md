@@ -2129,6 +2129,40 @@ cupón → editarlo → confirmar que persiste; y en `/`, que un cupón público
 aparezca y uno vencido/agotado/privado no. Sigue sin commitear, junto con el
 resto de la fase 2 (alta + toggle) que ya estaba en el working tree.
 
+## Desplegado a producción (2026-08-20)
+
+Commit `f9e49f5` en `main` (push a las 21:20 UTC), CI verde. El timer
+automático **no** lo desplegó solo: el commit se hizo en el propio directorio
+que sirve producción (`/var/www/casa-origen`), así que el `HEAD` local ya
+estaba en `f9e49f5` antes del push. `deploy.sh` compara `local_sha` contra
+`origin/main` y sólo construye si son distintos — al empujar, los dos
+quedaron iguales al instante y el siguiente tick leyó "already at f9e49f5,
+nothing to do" sin haber compilado nunca ese commit. (El tick anterior, con
+el commit todavía sin pushear, sí abortó correctamente por historias
+divergentes — esa guarda del 2026-08-08 funcionó como se diseñó.)
+
+**Gotcha para la próxima**: no comittear directo en `/var/www/casa-origen`
+antes de pushear. El chequeo "ya estoy al día" de `deploy.sh` asume que la
+única forma en que el `HEAD` local avanza es su propio `git pull`, seguido en
+el mismo run por el build — comittear ahí a mano rompe esa suposición sin
+tocar el script.
+
+Corregido a mano, mismos pasos que `deploy.sh` (`npm ci --include=dev`,
+`prisma migrate deploy` — sin migraciones pendientes, `pm2 stop`, backup a
+`.next.prev`, `npm run build`, `pm2 start`, health check). `curl` 200 al
+segundo intento. Verificado que el build nuevo es el que quedó sirviendo:
+`BUILD_ID` cambió y el chunk con el botón "Aplicar" del banner de cupón está
+en `.next/static/chunks`. `.next.prev` borrado después de confirmar salud.
+
+`/`, `/admin` y `/producto/pepperoni` responden 200. Ningún cupón está
+`isPublic` en la DB ahora mismo (`BIENVENIDA10` quedó `isActive: false`,
+`isPublic: false`), así que el banner no se ve — es el comportamiento
+correcto de `findPublicActive()`, no una falla.
+
+**Sigue pendiente**: la pasada manual en navegador (crear/editar cupón desde
+`/admin`, cupón público visible en `/`) no se hizo — sigue sin haber
+Chromium en este CT.
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.
