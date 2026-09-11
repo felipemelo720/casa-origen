@@ -2,6 +2,7 @@ import 'server-only';
 
 import { prisma } from '@/lib/db/prisma';
 import type { Prisma } from '@prisma/client';
+import type { ProductFormInput } from '@/schemas/product.schema';
 
 /** Shared include used everywhere the storefront needs a fully hydrated product. */
 export const productDetailInclude = {
@@ -241,4 +242,112 @@ export const productRepository = {
   async setFeatured(id: string, isFeatured: boolean) {
     return prisma.product.update({ where: { id }, data: { isFeatured } });
   },
+
+  /** Todo el catálogo, activo e inactivo, para el CRUD del panel. */
+  async findAllForAdmin() {
+    return prisma.product.findMany({
+      include: {
+        category: { select: { id: true, name: true } },
+        variantGroups: {
+          orderBy: { sortOrder: 'asc' },
+          include: { options: { orderBy: { sortOrder: 'asc' } } },
+        },
+      },
+      orderBy: [{ isActive: 'desc' }, { category: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+    });
+  },
+
+  /** Una fila completa para precargar el formulario de edición. */
+  async findByIdForAdmin(id: string) {
+    return prisma.product.findUnique({
+      where: { id },
+      include: {
+        variantGroups: {
+          orderBy: { sortOrder: 'asc' },
+          include: { options: { orderBy: { sortOrder: 'asc' } } },
+        },
+      },
+    });
+  },
+
+  /** Chequeo de unicidad del slug — activo o no, para no reciclar el de un retirado. */
+  async findBySlugAny(slug: string) {
+    return prisma.product.findUnique({ where: { slug }, select: { id: true } });
+  },
+
+  async createFromAdmin(input: ProductFormInput, image: string | null) {
+    return prisma.product.create({
+      data: {
+        name: input.name,
+        slug: input.slug,
+        shortDescription: input.shortDescription,
+        description: input.description,
+        image,
+        price: input.price,
+        offerPrice: input.offerPrice,
+        prepMinutes: input.prepMinutes,
+        allowNotes: input.allowNotes,
+        isVisible: input.isVisible,
+        categoryId: input.categoryId,
+        variantGroups: variantGroupsCreateInput(input),
+      },
+    });
+  },
+
+  /**
+   * El grupo de variantes se reemplaza entero en vez de diffearse: mismo
+   * criterio que tags/ingredientes en el seed. Borrar y recrear es más simple
+   * y más barato que reconciliar altas/bajas/ediciones de cada opción.
+   */
+  async updateFromAdmin(id: string, input: ProductFormInput, image: string | null | undefined) {
+    return prisma.$transaction(async (tx) => {
+      await tx.variantGroup.deleteMany({ where: { productId: id } }); // cascada a options
+      return tx.product.update({
+        where: { id },
+        data: {
+          name: input.name,
+          slug: input.slug,
+          shortDescription: input.shortDescription,
+          description: input.description,
+          ...(image !== undefined ? { image } : {}),
+          price: input.price,
+          offerPrice: input.offerPrice,
+          prepMinutes: input.prepMinutes,
+          allowNotes: input.allowNotes,
+          isVisible: input.isVisible,
+          categoryId: input.categoryId,
+          variantGroups: variantGroupsCreateInput(input),
+        },
+      });
+    });
+  },
+
+  /** Baja lógica: `isActive` sigue siendo el flag que retira un producto, los pedidos históricos lo referencian. */
+  async setActive(id: string, isActive: boolean) {
+    return prisma.product.update({ where: { id }, data: { isActive } });
+  },
 };
+
+function variantGroupsCreateInput(
+  input: ProductFormInput,
+): Prisma.ProductCreateInput['variantGroups'] {
+  if (input.options.length === 0) return undefined;
+  return {
+    create: [
+      {
+        name: input.variantGroupName ?? 'Opciones',
+        options: {
+          create: input.options.map((option, index) => ({
+            name: option.name,
+            priceDelta: option.priceDelta,
+            extraPrice: option.extraPrice,
+            extraPremiumPrice: option.extraPremiumPrice,
+            isAvailable: option.isAvailable,
+            isDefault: index === 0,
+            sortOrder: index,
+          })),
+        },
+      },
+    ],
+  };
+}

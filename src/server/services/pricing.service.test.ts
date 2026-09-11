@@ -34,13 +34,15 @@ const findCouponByCode = vi.mocked(couponRepository.findByCode);
 const countCustomerRedemptions = vi.mocked(couponRepository.countCustomerRedemptions);
 
 /** Delivery zone quoted at $1.500 – $4.000, charged at the low end. */
-function zone(overrides: Partial<{ deliveryFeeMin: number; deliveryFeeMax: number }> = {}) {
+function zone(
+  overrides: Partial<{ deliveryFeeMin: number; deliveryFeeMax: number; minOrder: number }> = {},
+) {
   const deliveryFeeMin = overrides.deliveryFeeMin ?? 1500;
   return {
     id: 'commune-1',
     name: 'Paine',
     isActive: true,
-    minOrder: 0,
+    minOrder: overrides.minOrder ?? 0,
     deliveryFee: deliveryFeeMin,
     deliveryFeeMin,
     deliveryFeeMax: overrides.deliveryFeeMax ?? 4000,
@@ -881,5 +883,129 @@ describe('priceCart — coupons', () => {
         customerId: 'cus-1',
       }),
     ).rejects.toThrow(CouponError);
+  });
+
+  it('rejects once usageLimit is reached, with no customer involved', async () => {
+    findCouponByCode.mockResolvedValue(baseCoupon({ value: 2000, usageLimit: 5, usageCount: 5 }));
+
+    await expect(
+      priceCart({ items: [baseItem()], orderType: 'PICKUP', couponCode: 'AGOTADO' }),
+    ).rejects.toThrow(CouponError);
+  });
+
+  it('rejects before startsAt and after endsAt', async () => {
+    findCouponByCode.mockResolvedValue(
+      baseCoupon({ value: 2000, startsAt: new Date('2999-01-01') }),
+    );
+    await expect(
+      priceCart({ items: [baseItem()], orderType: 'PICKUP', couponCode: 'FUTURO' }),
+    ).rejects.toThrow(CouponError);
+
+    findCouponByCode.mockResolvedValue(baseCoupon({ value: 2000, endsAt: new Date('2020-01-02') }));
+    await expect(
+      priceCart({ items: [baseItem()], orderType: 'PICKUP', couponCode: 'VENCIDO' }),
+    ).rejects.toThrow(CouponError);
+  });
+
+  it('caps a percentage coupon at its own maxDiscount, same as a promotion', async () => {
+    findCouponByCode.mockResolvedValue(
+      baseCoupon({ discountType: 'PERCENTAGE', value: 50, maxDiscount: 1000 }),
+    );
+    countCustomerRedemptions.mockResolvedValue(0);
+
+    const result = await priceCart({
+      items: [baseItem()],
+      orderType: 'PICKUP',
+      couponCode: 'MITAD',
+    });
+    // 50% of 8.000 would be 4.000; maxDiscount clamps it to 1.000.
+    expect(result.couponDiscount).toBe(1000);
+    expect(result.total).toBe(7000);
+  });
+
+  it('rejects a coupon that adds nothing on a cart with no delivery to waive', async () => {
+    findCouponByCode.mockResolvedValue(baseCoupon({ value: 0, freeDelivery: false }));
+    countCustomerRedemptions.mockResolvedValue(0);
+
+    await expect(
+      priceCart({ items: [baseItem()], orderType: 'PICKUP', couponCode: 'INUTIL' }),
+    ).rejects.toThrow('no agrega un descuento');
+  });
+
+  it('sums a fixed discount and the waived fee into one coupon value', async () => {
+    findCouponByCode.mockResolvedValue(baseCoupon({ value: 1000, freeDelivery: true }));
+    findCommuneById.mockResolvedValue(zone({ deliveryFeeMin: 1500 }));
+    countCustomerRedemptions.mockResolvedValue(0);
+
+    const result = await priceCart({
+      items: [baseItem()],
+      orderType: 'DELIVERY',
+      communeId: 'commune-1',
+      couponCode: 'COMBO',
+    });
+
+    // couponValue = 1.000 (fixed) + 1.500 (waived fee) = 2.500 total, but only
+    // the fixed part shows as couponDiscount — the fee itself just goes to 0.
+    expect(result.couponDiscount).toBe(1000);
+    expect(result.deliveryFee).toBe(0);
+    expect(result.total).toBe(7000); // 8.000 - 1.000 + 0 delivery
+  });
+
+  it('breaks an exact tie in favour of the promotion, not the coupon', async () => {
+    findActivePromotions.mockResolvedValue([
+      {
+        id: 'promo-1',
+        scope: 'ALL',
+        minSubtotal: 0,
+        discountType: 'FIXED',
+        value: 2000,
+        maxDiscount: null,
+        categories: [],
+        products: [],
+      },
+    ] as never);
+    findCouponByCode.mockResolvedValue(baseCoupon({ value: 2000 }));
+    countCustomerRedemptions.mockResolvedValue(0);
+
+    const result = await priceCart({
+      items: [baseItem()],
+      orderType: 'PICKUP',
+      couponCode: 'EMPATE',
+    });
+
+    expect(result.promotionId).toBe('promo-1');
+    expect(result.couponId).toBeNull();
+    expect(result.appliedCoupon).toBeNull();
+  });
+});
+
+describe('priceCart — delivery, more zone rules', () => {
+  it('falls back to the default fee when the zone has no fee of its own', async () => {
+    getSettings.mockResolvedValue({ ...baseSettings(), defaultDeliveryFee: 900 });
+    findCommuneById.mockResolvedValue(zone({ deliveryFeeMin: 0, deliveryFeeMax: 0 }));
+
+    const result = await priceCart({
+      items: [baseItem()],
+      orderType: 'DELIVERY',
+      communeId: 'commune-1',
+    });
+
+    expect(result.deliveryFee).toBe(900);
+  });
+
+  it('rejects a subtotal under the zone-specific minimum, distinct from the global one', async () => {
+    findCommuneById.mockResolvedValue(zone({ minOrder: 50_000 }));
+
+    await expect(
+      priceCart({ items: [baseItem()], orderType: 'DELIVERY', communeId: 'commune-1' }),
+    ).rejects.toThrow('Paine');
+  });
+
+  it('rejects an inactive or unknown commune', async () => {
+    findCommuneById.mockResolvedValue(null);
+
+    await expect(
+      priceCart({ items: [baseItem()], orderType: 'DELIVERY', communeId: 'ghost' }),
+    ).rejects.toThrow(BusinessRuleError);
   });
 });

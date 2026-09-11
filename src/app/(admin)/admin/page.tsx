@@ -248,21 +248,29 @@ export default async function AdminPage() {
 
         {/* Menu availability */}
         <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-span-2 lg:col-start-2 lg:row-start-2">
-          <div className="space-y-1">
-            <p className="text-muted-foreground text-xs tracking-widest uppercase">Menú</p>
-            <p className="text-muted-foreground text-xs">
-              <Star className="mr-1 inline size-3" />
-              destaca el producto en «Los más pedidos» de la portada.{' '}
-              {featuredCount === 0
-                ? `Sin ninguno destacado se muestran los ${HIGHLIGHTED_LIMIT} más vendidos.`
-                : `${featuredCount} destacado${featuredCount === 1 ? '' : 's'}.`}
-            </p>
-            {featuredCount > HIGHLIGHTED_LIMIT && (
-              <p className="text-xs font-medium text-amber-600">
-                La portada solo muestra {HIGHLIGHTED_LIMIT}: sobran{' '}
-                {featuredCount - HIGHLIGHTED_LIMIT}.
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-muted-foreground text-xs tracking-widest uppercase">Menú</p>
+              <p className="text-muted-foreground text-xs">
+                <Star className="mr-1 inline size-3" />
+                destaca el producto en «Los más pedidos» de la portada.{' '}
+                {featuredCount === 0
+                  ? `Sin ninguno destacado se muestran los ${HIGHLIGHTED_LIMIT} más vendidos.`
+                  : `${featuredCount} destacado${featuredCount === 1 ? '' : 's'}.`}
               </p>
-            )}
+              {featuredCount > HIGHLIGHTED_LIMIT && (
+                <p className="text-xs font-medium text-amber-600">
+                  La portada solo muestra {HIGHLIGHTED_LIMIT}: sobran{' '}
+                  {featuredCount - HIGHLIGHTED_LIMIT}.
+                </p>
+              )}
+            </div>
+            {/* Agotar/destacar sigue acá abajo para el toque diario; crear,
+                editar y eliminar productos vive aparte — no cabe en esta
+                pantalla sin empujar horarios y cupones fuera del fold. */}
+            <Button asChild variant="outline" size="sm" className="h-11 shrink-0">
+              <Link href="/admin/productos">Gestionar</Link>
+            </Button>
           </div>
           {[...categories.values()].map(({ categoryName, products: categoryProducts }) => (
             <div key={categoryName} className="space-y-2">
