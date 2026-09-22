@@ -1,8 +1,8 @@
 # Casa Origen — plan de proyecto
 
 Pedidos de pizza. Next.js 15 App Router + TypeScript + Prisma + PostgreSQL.
-Cuentas de cliente opcionales (email + password), sin RBAC. Producción: VPS
-Debian 12 + Docker + Nginx.
+Cuentas de cliente opcionales (email + password), sin RBAC. Producción: CT LXC
+Debian 13 + pm2 (`casaorigen`, puerto 3006), sin Docker ni Nginx.
 
 ---
 
@@ -2175,9 +2175,24 @@ o galería). Capas: `product.schema.ts`, `product.actions.ts`,
 integración (auth/pricing/cupones), no del CRUD en sí.
 
 **Falta para cerrarlo**: sin CRUD de categorías (categoría fija, viene del
-`<select>`), sin tests del CRUD mismo, sin confirmación antes de "Eliminar",
-foto vieja no se borra al reemplazar (huérfana en disco, ya justo), sin QA
-manual en navegador.
+`<select>`), sin QA manual en navegador.
+
+**Cerrado después**:
+
+- `88dc282` — confirmación antes de "Eliminar".
+- `db46303` — al reemplazar la foto, `updateProductAction` borra la vieja
+  del disco (solo bajo `UPLOAD_DIR/products`; `public/menu/*.jpg` del seed
+  no se toca).
+- `withImageRollback` en `product.actions.ts` — si `createFromAdmin` o
+  `updateFromAdmin` fallan después de guardar la foto nueva, se borra del
+  disco. Probado con un test temporal que falló sin el fix (quedaban
+  `rb-create-*.jpg` y `rb-update-*.jpg`) y pasó con él.
+- `tests/integration/product-crud.itest.ts` — 15 tests: auth en las tres
+  acciones, alta con tamaños y precio entero, slug duplicado, validación,
+  edición que reemplaza tamaños, foto (guarda, reemplaza y borra la vieja,
+  no toca `public/menu`, rollback si falla la base) y baja lógica. Crean sus
+  propios productos (`crud-test*`) y los borran en `afterEach`: el catálogo
+  no entra en `resetDb()`.
 
 ## Infraestructura dev
 
