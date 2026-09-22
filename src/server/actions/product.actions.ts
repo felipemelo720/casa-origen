@@ -99,16 +99,30 @@ async function saveProductImage(formData: FormData, slug: string): Promise<strin
 }
 
 /**
- * Borra la foto vieja del disco cuando se reemplaza por una nueva. Solo toca
- * archivos bajo `UPLOAD_DIR` — las fotos del seed viven en `public/menu/*.jpg`,
- * fuera de ese árbol, y no se tocan. El disco de este CT ya anda justo.
+ * Borra una foto del disco: la vieja cuando se reemplaza, o la recién subida
+ * cuando falla la escritura en la base. Solo toca archivos bajo `UPLOAD_DIR` —
+ * las fotos del seed viven en `public/menu/*.jpg`, fuera de ese árbol, y no se
+ * tocan. El disco de este CT ya anda justo.
  */
-async function deleteOldProductImage(oldImage: string | null): Promise<void> {
-  if (!oldImage || !oldImage.startsWith(productImageUrlPrefix())) return;
+async function deleteProductImage(image: string | null | undefined): Promise<void> {
+  if (!image || !image.startsWith(productImageUrlPrefix())) return;
   try {
-    await unlink(path.join(process.cwd(), 'public', oldImage));
+    await unlink(path.join(process.cwd(), 'public', image));
   } catch (error) {
-    logger.warn({ err: error, oldImage }, 'No se pudo borrar la foto vieja del producto');
+    logger.warn({ err: error, image }, 'No se pudo borrar la foto del producto');
+  }
+}
+
+/** Si la base rechaza la escritura, la foto ya guardada quedaría huérfana. */
+async function withImageRollback<T>(
+  image: string | undefined,
+  write: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    await deleteProductImage(image);
+    throw error;
   }
 }
 
@@ -128,7 +142,9 @@ export async function createProductAction(_state: AdminResult | null, formData: 
     }
 
     const image = await saveProductImage(formData, parsed.data.slug);
-    const product = await productRepository.createFromAdmin(parsed.data, image ?? null);
+    const product = await withImageRollback(image, () =>
+      productRepository.createFromAdmin(parsed.data, image ?? null),
+    );
 
     revalidatePath('/admin');
     revalidatePath('/admin/productos');
@@ -162,8 +178,10 @@ export async function updateProductAction(
 
     const image = await saveProductImage(formData, parsed.data.slug);
     const previous = image !== undefined ? await productRepository.findImageById(productId) : null;
-    const product = await productRepository.updateFromAdmin(productId, parsed.data, image);
-    if (previous) await deleteOldProductImage(previous.image);
+    const product = await withImageRollback(image, () =>
+      productRepository.updateFromAdmin(productId, parsed.data, image),
+    );
+    if (previous) await deleteProductImage(previous.image);
 
     revalidatePath('/admin');
     revalidatePath('/admin/productos');
