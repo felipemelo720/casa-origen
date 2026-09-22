@@ -913,14 +913,13 @@ async function seedPromotionsAndCoupons() {
     },
   });
 
-  // Promo Dúo: dos pizzas de 32 cm por $17.990. `scope: CATEGORY` sobre pizzas
-  // y no una lista de productos: la única variante llamada "32 cm" vive en las
-  // pizzas, así que el filtro de tamaño ya acota el set, y una pizza nueva
-  // entra a la promo sin tocar el seed. Para dejar una afuera (la Mechada es
-  // la que más margen regala: el par vale $25.000), se cambia `scope` a
-  // PRODUCT y se listan las que sí entran en `promotion_products`.
-  const pizzas = await prisma.category.findUnique({
-    where: { slug: 'pizzas' },
+  // Promo Dúo: dos pizzas de 32 cm por $17.990. `scope: PRODUCT` y no CATEGORY:
+  // Tres Carnes y Mechada quedan afuera (son las de más margen regalado: el
+  // par de Mechada solo vale $25.000). Una pizza nueva NO entra a la promo
+  // sola por estar en la categoría; hay que agregarla a la lista de abajo.
+  const duoPizzaSlugs = ['pepperoni', 'napolitana', 'cherry-margarita', 'rustica', 'la-huerta'];
+  const duoPizzas = await prisma.product.findMany({
+    where: { slug: { in: duoPizzaSlugs } },
     select: { id: true },
   });
 
@@ -929,7 +928,7 @@ async function seedPromotionsAndCoupons() {
     description: 'Dos pizzas de 32 cm por un solo precio.',
     discountType: 'BUNDLE_PRICE',
     value: 17990,
-    scope: 'CATEGORY',
+    scope: 'PRODUCT',
     bundleSize: 2,
     bundleVariantName: '32 cm',
     bundleSizeLabel: '32 cm',
@@ -948,13 +947,16 @@ async function seedPromotionsAndCoupons() {
     // que poder corregirlo con un seed y sin resetear la base.
     update: {
       ...duo,
-      categories: pizzas ? { deleteMany: {}, create: [{ categoryId: pizzas.id }] } : undefined,
+      products: {
+        deleteMany: {},
+        create: duoPizzas.map((p) => ({ productId: p.id })),
+      },
     },
     create: {
       slug: 'promo-duo',
       ...duo,
       startsAt: new Date(),
-      categories: pizzas ? { create: [{ categoryId: pizzas.id }] } : undefined,
+      products: { create: duoPizzas.map((p) => ({ productId: p.id })) },
     },
   });
 }

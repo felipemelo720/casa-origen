@@ -2163,6 +2163,22 @@ correcto de `findPublicActive()`, no una falla.
 `/admin`, cupón público visible en `/`) no se hizo — sigue sin haber
 Chromium en este CT.
 
+## CRUD de productos en admin (2026-09-11)
+
+Commit `32397ce`. Reintroduce `/admin/productos` (listar, crear, editar,
+baja lógica) que el pivote del 2026-08-02/03 había borrado — ver
+`category.repository.ts`, vuelve por tener caller de nuevo. Tamaños/variantes
+y foto desde el celular (`accept="image/*"` sin `capture`, deja elegir cámara
+o galería). Capas: `product.schema.ts`, `product.actions.ts`,
+`product.repository.ts` extendido, `category.repository.ts` nuevo (solo
+`findAllActive`, alimenta el `<select>`). Mismo commit sumó 343 unit + 34
+integración (auth/pricing/cupones), no del CRUD en sí.
+
+**Falta para cerrarlo**: sin CRUD de categorías (categoría fija, viene del
+`<select>`), sin tests del CRUD mismo, sin confirmación antes de "Eliminar",
+foto vieja no se borra al reemplazar (huérfana en disco, ya justo), sin QA
+manual en navegador.
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.
