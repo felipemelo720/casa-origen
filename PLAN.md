@@ -2194,6 +2194,54 @@ integración (auth/pricing/cupones), no del CRUD en sí.
   propios productos (`crud-test*`) y los borran en `afterEach`: el catálogo
   no entra en `resetDb()`.
 
+## `/admin` como dashboard: una sección por pregunta (2026-09-22)
+
+Commits `063fd5a`..`6896619`, desplegado a 3006 el mismo día. Checkpoint
+previo: tag `pre-dashboard`.
+
+**Problema**: `/admin` era una sola página con todo apilado (estado,
+horarios, menú, zonas, métricas, cupones) y cada subpágina tenía su propio
+header y ancho (7xl, 3xl, 2xl). Lo que el operador toca durante el turno
+(abrir/cerrar, agotar) quedaba entre formularios que se tocan una vez.
+
+**Cambio** — solo UI; acciones, servicios y schema intactos:
+
+- `admin/layout.tsx` + `features/admin/admin-nav.tsx`: barra lateral desde
+  `lg`, barra inferior en el teléfono (zona del pulgar). Sin sesión el layout
+  no envuelve nada: el login de `/admin` sigue a pantalla completa.
+  `AdminPageHeader` unifica título/volver/acciones.
+- **Hoy** (`/admin`): estado + delivery arriba, métricas de 7 días en fila,
+  agotar/destacar (2/3) junto al detalle por día (1/3). Un solo
+  `Promise.all` (antes eran dos tandas).
+- **Productos**: mismo CRUD, dentro del marco común.
+- **Cupones** (`/admin/cupones`): lista + alta al costado desde `xl`; en el
+  teléfono el alta va debajo y «Nuevo» baja con un ancla.
+- **Ajustes** (`/admin/configuracion`): horarios y zonas, lado a lado desde
+  `2xl`.
+- `logoutAction` ahora hace `redirect('/admin')`: desde una subruta,
+  re-renderizar en el lugar dejaba la página sin el marco.
+
+**Verificado**: `tsc`, lint, 343 unit + 49 integración; rutas 200 con
+sesión y 307 sin ella; 26/26 assets 200. Que la página se refresca tras
+guardar en las rutas nuevas se confirmó leyendo Next
+(`skipFlight: !workStore.pathWasRevalidated`: cualquier revalidación
+re-renderiza la ruta actual). **No verificado en navegador**: sin QA
+manual todavía.
+
+**Tradeoffs**: Ajustes y Cupones quedan a un toque más; a cambio lo diario
+no tiene scroll encima. Cupones sin panel lateral (sería JS de cliente solo
+para mover un formulario). La barra lateral come 14rem: el menú de Hoy pasa
+a dos columnas recién en `xl` y Ajustes a dos columnas en `2xl` — con menos,
+el nombre del producto (~57px) y el de la zona (~70px) se truncaban.
+
+**Pendiente**: los toggles y filas de Hoy siguen con `green/red/amber-*`
+hardcodeados (código movido tal cual, contra el contrato de tokens).
+
+**Incidente durante el trabajo**: `npm run dev` en este directorio reescribe
+el `.next/` que sirve producción. Se corrió una vez: ~5 min con la tienda sin
+JS (HTML 200, chunks 400). Restaurado desde `.next.bak` y rebuild. Ver
+«Infraestructura dev».
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.
@@ -2202,7 +2250,13 @@ anterior). Tampoco hay `.env`: los secretos viven en `.env.production`, que
 Next lee por su cuenta y el CLI de Prisma **no** — de ahí que `migrate deploy`
 necesite `DATABASE_URL` explícito.
 
-`npm run dev` / `build` / `npx prisma studio` funcionan.
+**No correr `npm run dev` en `/var/www/casa-origen`** (2026-09-22):
+producción (`next start`, pm2) sirve desde el mismo `.next/` y dev lo
+reescribe — la tienda queda sin JS. Además dev no arranca: no hay `.env` y
+dev no lee `.env.production`. Para ver cambios: `git worktree` aparte,
+`node_modules` enlazado, build + `next start -p 3010` con las variables de
+`.env.test` (base `casaorigen_test`, así los botones del admin no tocan la
+tienda real).
 
 **Desactualizado (visto 2026-08-14)**: en esta máquina no hay binario `docker`
 y el 5435 está cerrado. La DB que usa producción es un Postgres nativo en
