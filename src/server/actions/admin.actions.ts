@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 import {
   assertAdmin,
@@ -49,6 +50,9 @@ export async function loginAction(_state: AdminResult | null, formData: FormData
 export async function logoutAction(): Promise<void> {
   await clearAdminSession();
   revalidatePath('/admin');
+  // Desde una subruta, re-renderizar en el lugar mostraría la página sin el
+  // marco del panel: el login vive solo en `/admin`.
+  redirect('/admin');
 }
 
 export async function toggleAcceptingOrdersAction(

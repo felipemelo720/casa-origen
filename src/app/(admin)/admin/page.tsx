@@ -1,11 +1,10 @@
 import { startOfDay, subDays } from 'date-fns';
 import Link from 'next/link';
-import { DollarSign, Receipt, ShoppingBag, Star, Store, TicketPercent } from 'lucide-react';
+import { DollarSign, Receipt, ShoppingBag, Star, TicketPercent } from 'lucide-react';
 
 import { isAdminAuthenticated } from '@/lib/auth/admin-session';
 import {
   loginAction,
-  logoutAction,
   toggleAcceptingOrdersAction,
   toggleDeliveryAction,
   setProductAvailabilityAction,
@@ -96,31 +95,7 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <main className="min-h-dvh pb-12">
-      <header className="border-border bg-background/80 sticky top-0 z-20 border-b backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <div>
-            <h1 className="font-display text-2xl font-bold">Admin</h1>
-            <p className="text-muted-foreground text-xs">Casa Origen</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* La tienda es a dónde vuelve el operador después de tocar algo:
-                sin esto había que editar la URL a mano para ver el efecto. */}
-            <Button asChild variant="outline" size="sm">
-              <Link href="/">
-                <Store aria-hidden="true" />
-                Ver tienda
-              </Link>
-            </Button>
-            <form action={logoutAction}>
-              <Button type="submit" variant="ghost" size="sm">
-                Salir
-              </Button>
-            </form>
-          </div>
-        </div>
-      </header>
-
+    <>
       {/*
         Una sola grilla: móvil apila en el orden de siempre (operación, horarios,
         menú, métricas). Desde `lg` se colocan a mano para que la columna angosta
@@ -132,7 +107,7 @@ export default async function AdminPage() {
         el track se estiraba y **todas** las secciones se comían el margen
         derecho, con scroll horizontal en toda la página.
       */}
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-3 lg:items-start lg:py-8 [&>section]:min-w-0">
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-3 lg:items-start lg:px-8 lg:py-8 [&>section]:min-w-0">
         {/* Operations: store status + delivery */}
         <section className="border-border bg-card divide-border divide-y rounded-2xl border lg:col-start-1 lg:row-start-1">
           <div className="space-y-4 p-6">
@@ -472,6 +447,6 @@ export default async function AdminPage() {
           </AdminForm>
         </section>
       </div>
-    </main>
+    </>
   );
 }
