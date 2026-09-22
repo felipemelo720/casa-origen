@@ -1,12 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { assertAdmin } from '@/lib/auth/admin-session';
 import { env } from '@/config/env';
 import { BusinessRuleError, ConflictError, ErrorCode } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 import { parseMoney } from '@/lib/money';
 import { fail, failFrom, ok, type ActionResult } from '@/lib/result';
 import { slugify } from '@/lib/utils';
@@ -16,6 +17,16 @@ import { MAX_VARIANT_OPTIONS, productFormSchema } from '@/schemas/product.schema
 type AdminResult = ActionResult<string>;
 
 const PRODUCTS_SUBDIR = 'products';
+
+/** `UPLOAD_DIR` vive bajo `public/`: la URL servida es la misma ruta sin ese prefijo. */
+function productImagePublicDir(): string {
+  return env.UPLOAD_DIR.replace(/^\.?\/?public\/?/, '');
+}
+
+/** Prefijo de URL de las fotos subidas por el admin — no cubre `public/menu/*.jpg` del seed. */
+function productImageUrlPrefix(): string {
+  return `/${[productImagePublicDir(), PRODUCTS_SUBDIR].filter(Boolean).join('/')}/`;
+}
 
 /** Campo vacío = "vacío", no `0`: un tope de $0 pasaría la carta como gratis. */
 function optionalMoney(formData: FormData, name: string): number | null {
@@ -84,10 +95,21 @@ async function saveProductImage(formData: FormData, slug: string): Promise<strin
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, filename), Buffer.from(await file.arrayBuffer()));
 
-  // `UPLOAD_DIR` vive bajo `public/`: la URL servida es la misma ruta sin ese
-  // prefijo. Acoplado a la convención del env, documentado por si se mueve.
-  const publicDir = env.UPLOAD_DIR.replace(/^\.?\/?public\/?/, '');
-  return `/${[publicDir, PRODUCTS_SUBDIR, filename].filter(Boolean).join('/')}`;
+  return `${productImageUrlPrefix()}${filename}`;
+}
+
+/**
+ * Borra la foto vieja del disco cuando se reemplaza por una nueva. Solo toca
+ * archivos bajo `UPLOAD_DIR` — las fotos del seed viven en `public/menu/*.jpg`,
+ * fuera de ese árbol, y no se tocan. El disco de este CT ya anda justo.
+ */
+async function deleteOldProductImage(oldImage: string | null): Promise<void> {
+  if (!oldImage || !oldImage.startsWith(productImageUrlPrefix())) return;
+  try {
+    await unlink(path.join(process.cwd(), 'public', oldImage));
+  } catch (error) {
+    logger.warn({ err: error, oldImage }, 'No se pudo borrar la foto vieja del producto');
+  }
 }
 
 export async function createProductAction(_state: AdminResult | null, formData: FormData) {
@@ -139,7 +161,9 @@ export async function updateProductAction(
     }
 
     const image = await saveProductImage(formData, parsed.data.slug);
+    const previous = image !== undefined ? await productRepository.findImageById(productId) : null;
     const product = await productRepository.updateFromAdmin(productId, parsed.data, image);
+    if (previous) await deleteOldProductImage(previous.image);
 
     revalidatePath('/admin');
     revalidatePath('/admin/productos');

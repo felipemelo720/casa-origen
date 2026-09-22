@@ -275,6 +275,11 @@ export const productRepository = {
     return prisma.product.findUnique({ where: { slug }, select: { id: true } });
   },
 
+  /** Solo la foto actual, para borrarla del disco si el admin sube una nueva. */
+  async findImageById(id: string) {
+    return prisma.product.findUnique({ where: { id }, select: { image: true } });
+  },
+
   async createFromAdmin(input: ProductFormInput, image: string | null) {
     return prisma.product.create({
       data: {
