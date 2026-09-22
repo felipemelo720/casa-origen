@@ -2,6 +2,18 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Pencil } from 'lucide-react';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 import { AdminForm, AdminSubmit } from '@/features/admin/admin-form';
 import { setProductActiveAction } from '@/server/actions/product.actions';
 import { formatMoney } from '@/lib/money';
@@ -66,23 +78,50 @@ export function ProductRow({ product }: { product: ProductRowValues }) {
         >
           <Pencil className="size-4" aria-hidden="true" />
         </Link>
-        <AdminForm
-          feedback="toast"
-          action={setProductActiveAction.bind(null, product.id, !product.isActive)}
-        >
-          <AdminSubmit
-            variant="outline"
-            pendingLabel="…"
-            className={cn(
-              'h-11 px-3',
-              product.isActive
-                ? 'border-red-500/40 text-red-600'
-                : 'border-green-500/40 text-green-600',
-            )}
-          >
-            {product.isActive ? 'Eliminar' : 'Republicar'}
-          </AdminSubmit>
-        </AdminForm>
+        {product.isActive ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="border-destructive/40 text-destructive h-11 px-3"
+              >
+                Eliminar
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar {product.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Deja de verse en la carta. Los pedidos ya hechos no se tocan y se puede republicar
+                  después.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AdminForm
+                  feedback="toast"
+                  action={setProductActiveAction.bind(null, product.id, false)}
+                >
+                  <AlertDialogAction asChild>
+                    <AdminSubmit variant="destructive" pendingLabel="…">
+                      Eliminar
+                    </AdminSubmit>
+                  </AlertDialogAction>
+                </AdminForm>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : (
+          <AdminForm feedback="toast" action={setProductActiveAction.bind(null, product.id, true)}>
+            <AdminSubmit
+              variant="outline"
+              pendingLabel="…"
+              className="border-success/40 text-success h-11 px-3"
+            >
+              Republicar
+            </AdminSubmit>
+          </AdminForm>
+        )}
       </div>
     </div>
   );
