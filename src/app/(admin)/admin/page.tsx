@@ -14,6 +14,7 @@ import { settingsRepository } from '@/server/repositories/operations.repository'
 import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
 import { analyticsRepository } from '@/server/repositories/analytics.repository';
 import { AdminForm, AdminSubmit } from '@/features/admin/admin-form';
+import { AdminPageHeader } from '@/features/admin/admin-page-header';
 import { StatCard } from '@/features/admin/stat-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,9 +44,14 @@ export default async function AdminPage() {
     );
   }
 
-  const [settings, products] = await Promise.all([
+  // Un solo `Promise.all`: antes las métricas esperaban a que terminara la
+  // primera tanda de consultas.
+  const since = startOfDay(subDays(new Date(), 6));
+  const [settings, products, sales, dailySeries] = await Promise.all([
     settingsRepository.get(),
     productRepository.findAllForAvailabilityToggle(),
+    analyticsRepository.salesBetween(since, new Date()),
+    analyticsRepository.dailySeries(since, new Date()),
   ]);
 
   const featuredCount = products.filter((product) => product.isFeatured).length;
@@ -60,29 +66,25 @@ export default async function AdminPage() {
     categories.set(product.category.id, bucket);
   }
 
-  const since = startOfDay(subDays(new Date(), 6));
-  const [sales, dailySeries] = await Promise.all([
-    analyticsRepository.salesBetween(since, new Date()),
-    analyticsRepository.dailySeries(since, new Date()),
-  ]);
+  /*
+    Orden por frecuencia de uso durante el turno: abrir/cerrar y delivery
+    arriba (un toque), después cómo va la semana, y abajo agotar/destacar.
+    Lo que se configura una vez vive en Ajustes y Cupones.
 
+    `[&>section]:min-w-0` no es cosmético: un grid item nace con
+    `min-width: auto` y el track crece hasta el `min-content` del hijo más
+    ancho — a 360px eso metía scroll horizontal en toda la página.
+  */
   return (
-    <>
-      {/*
-        Una sola grilla: móvil apila en el orden de siempre (operación, horarios,
-        menú, métricas). Desde `lg` se colocan a mano para que la columna angosta
-        quede con lo que se toca a diario y la ancha con las tablas.
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8 lg:py-8">
+      <AdminPageHeader title="Hoy" description="Lo que se toca durante el turno." />
 
-        `[&>section]:min-w-0` no es cosmético: un grid item nace con
-        `min-width: auto`, así que el track crece hasta el `min-content` del
-        hijo más ancho. A 360px había 328px de ancho útil y Horarios pedía 344:
-        el track se estiraba y **todas** las secciones se comían el margen
-        derecho, con scroll horizontal en toda la página.
-      */}
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-3 lg:items-start lg:px-8 lg:py-8 [&>section]:min-w-0">
-        {/* Operations: store status + delivery */}
-        <section className="border-border bg-card divide-border divide-y rounded-2xl border lg:col-start-1 lg:row-start-1">
-          <div className="space-y-4 p-6">
+      <div className="grid gap-4 sm:grid-cols-2 [&>section]:min-w-0">
+        <section
+          aria-label="Estado del negocio"
+          className="border-border bg-card rounded-2xl border"
+        >
+          <div className="flex h-full flex-col justify-between gap-4 p-4 sm:p-6">
             <div>
               <p className="text-muted-foreground text-xs tracking-widest uppercase">
                 Estado del negocio
@@ -121,8 +123,9 @@ export default async function AdminPage() {
               </AdminSubmit>
             </AdminForm>
           </div>
-
-          <div className="space-y-4 p-6">
+        </section>
+        <section aria-label="Delivery" className="border-border bg-card rounded-2xl border">
+          <div className="flex h-full flex-col justify-between gap-4 p-4 sm:p-6">
             <div>
               <p className="text-muted-foreground text-xs tracking-widest uppercase">Delivery</p>
               <div className="mt-1 flex items-center gap-2">
@@ -156,9 +159,21 @@ export default async function AdminPage() {
             </AdminForm>
           </div>
         </section>
+      </div>
 
-        {/* Menu availability */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-span-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+      <section aria-labelledby="semana" className="space-y-3">
+        <h2 id="semana" className="text-muted-foreground text-xs tracking-widest uppercase">
+          Últimos 7 días
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard icon={DollarSign} label="Ventas" value={formatMoney(sales.revenue)} />
+          <StatCard icon={ShoppingBag} label="Pedidos" value={String(sales.orderCount)} />
+          <StatCard icon={Receipt} label="Ticket prom." value={formatMoney(sales.averageTicket)} />
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-start [&>section]:min-w-0">
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-4 sm:p-6 lg:col-span-2">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <p className="text-muted-foreground text-xs tracking-widest uppercase">Menú</p>
@@ -176,9 +191,8 @@ export default async function AdminPage() {
                 </p>
               )}
             </div>
-            {/* Agotar/destacar sigue acá abajo para el toque diario; crear,
-                editar y eliminar productos vive aparte — no cabe en esta
-                pantalla sin empujar horarios y cupones fuera del fold. */}
+            {/* Agotar/destacar es el toque diario; crear, editar y
+                eliminar vive en Productos. */}
             <Button asChild variant="outline" size="sm" className="h-11 shrink-0">
               <Link href="/admin/productos">Gestionar</Link>
             </Button>
@@ -273,18 +287,8 @@ export default async function AdminPage() {
           ))}
         </section>
 
-        {/* Stats */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-start-1 lg:row-start-2">
-          <p className="text-muted-foreground text-xs tracking-widest uppercase">Últimos 7 días</p>
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-            <StatCard icon={DollarSign} label="Ventas" value={formatMoney(sales.revenue)} />
-            <StatCard icon={ShoppingBag} label="Pedidos" value={String(sales.orderCount)} />
-            <StatCard
-              icon={Receipt}
-              label="Ticket prom."
-              value={formatMoney(sales.averageTicket)}
-            />
-          </div>
+        <section className="border-border bg-card space-y-3 rounded-2xl border p-4 sm:p-6">
+          <p className="text-muted-foreground text-xs tracking-widest uppercase">Día a día</p>
           <div className="divide-border/60 divide-y">
             {dailySeries.map((day) => (
               <div
@@ -305,6 +309,6 @@ export default async function AdminPage() {
           </div>
         </section>
       </div>
-    </>
+    </div>
   );
 }
