@@ -39,7 +39,7 @@ export default async function AdminSettingsPage() {
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8 lg:py-8">
       <AdminPageHeader title="Ajustes" description="Horarios y zonas de despacho." />
 
-      <div className="grid gap-6 xl:grid-cols-2 xl:items-start [&>section]:min-w-0">
+      <div className="grid gap-6 2xl:grid-cols-2 2xl:items-start [&>section]:min-w-0">
         <section
           aria-labelledby="horarios"
           className="border-border bg-card space-y-4 rounded-2xl border p-4 sm:p-6"
