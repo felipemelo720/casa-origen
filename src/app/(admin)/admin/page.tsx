@@ -9,20 +9,15 @@ import {
   toggleDeliveryAction,
   setProductAvailabilityAction,
   setProductFeaturedAction,
-  updateBusinessHoursAction,
-  updateCommunesAction,
 } from '@/server/actions/admin.actions';
 import { createCouponAction } from '@/server/actions/coupon.actions';
-import { communeRepository, settingsRepository } from '@/server/repositories/operations.repository';
+import { settingsRepository } from '@/server/repositories/operations.repository';
 import { HIGHLIGHTED_LIMIT, productRepository } from '@/server/repositories/product.repository';
 import { analyticsRepository } from '@/server/repositories/analytics.repository';
 import { couponRepository } from '@/server/repositories/promotion.repository';
-import { getWeeklySchedule } from '@/server/services/schedule.service';
 import { AdminForm, AdminSubmit } from '@/features/admin/admin-form';
 import { NewCouponFields } from '@/features/admin/coupon-fields';
 import { CouponRow } from '@/features/admin/coupon-row';
-import { ScheduleDayRow } from '@/features/admin/schedule-day-row';
-import { ZoneRow } from '@/features/admin/zone-row';
 import { StatCard } from '@/features/admin/stat-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,18 +26,6 @@ import { cn } from '@/lib/utils';
 
 export const metadata = { title: 'Admin — Casa Origen' };
 export const dynamic = 'force-dynamic';
-
-/**
- * Un día cerrado se guarda como 00:00–00:00. Mostrar eso al destildar «Cerrado»
- * dejaría abrir el día con una ventana de cero minutos, así que el form parte
- * del primer turno real del local y el operador solo lo corrige si hace falta.
- *
- * El segundo turno no se precarga acá: solo existe si el día ya lo tiene, y si
- * no, la fila ofrece agregarlo (ver `SECOND_SHIFT_DEFAULT` en `ScheduleDayRow`).
- */
-const FALLBACK_SHIFT = { opensAt: '12:30', closesAt: '15:00' } as const;
-
-const EMPTY_SHIFT = { opensAt: '', closesAt: '' } as const;
 
 export default async function AdminPage() {
   const isAuthenticated = await isAdminAuthenticated();
@@ -64,13 +47,9 @@ export default async function AdminPage() {
     );
   }
 
-  const [settings, products, weeklySchedule, zones, coupons] = await Promise.all([
+  const [settings, products, coupons] = await Promise.all([
     settingsRepository.get(),
     productRepository.findAllForAvailabilityToggle(),
-    getWeeklySchedule(),
-    // `findAllForAdmin`, no `findAllActive`: una zona apagada tiene que seguir
-    // visible acá, si no no hay forma de volver a encenderla.
-    communeRepository.findAllForAdmin(),
     // Mismo criterio: los cupones apagados siguen en la lista porque apagar es
     // la única forma de retirar uno (borrarlo se llevaría las redenciones).
     couponRepository.findAllForAdmin(),
@@ -185,44 +164,8 @@ export default async function AdminPage() {
           </div>
         </section>
 
-        {/* Business hours */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-4 sm:p-6 lg:col-span-2 lg:col-start-2 lg:row-start-1">
-          <div>
-            <p className="text-muted-foreground text-xs tracking-widest uppercase">Horarios</p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              Estos son los horarios que se muestran en la web. Agrega el segundo turno solo en los
-              días que cierras al mediodía.
-            </p>
-          </div>
-          <AdminForm action={updateBusinessHoursAction} className="space-y-3">
-            {/*
-              Una tarjeta por día, mismo layout en todo ancho: desde `lg` solo
-              se ponen de a dos por fila. La grilla de cuatro columnas con
-              cabecera se fue porque su `min-content` (344px) desbordaba la
-              columna de 328px del panel en móvil y arrastraba a las otras
-              secciones, que comparten el track.
-            */}
-            <div className="grid min-w-0 gap-2 lg:grid-cols-2">
-              {weeklySchedule.map((day) => (
-                <ScheduleDayRow
-                  key={day.dayOfWeek}
-                  dayOfWeek={day.dayOfWeek}
-                  label={day.label}
-                  isToday={day.isToday}
-                  isClosed={day.isClosed}
-                  // Un día cerrado se guarda como 00:00–00:00: mostrar eso al
-                  // reabrirlo dejaría una ventana de cero minutos.
-                  first={day.slots[0] ?? FALLBACK_SHIFT}
-                  second={day.slots[1] ?? EMPTY_SHIFT}
-                />
-              ))}
-            </div>
-            <AdminSubmit className="h-11 w-full">Guardar horarios</AdminSubmit>
-          </AdminForm>
-        </section>
-
         {/* Menu availability */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-span-2 lg:col-start-2 lg:row-start-2">
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-span-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <p className="text-muted-foreground text-xs tracking-widest uppercase">Menú</p>
@@ -337,52 +280,6 @@ export default async function AdminPage() {
           ))}
         </section>
 
-        {/* Delivery zones */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-4 sm:p-6 lg:col-span-2 lg:col-start-2 lg:row-start-3">
-          <div>
-            <p className="text-muted-foreground text-xs tracking-widest uppercase">
-              Zonas de despacho
-            </p>
-            <p className="text-muted-foreground mt-1 text-xs">
-              El cobro es siempre el valor mínimo; el máximo solo se muestra como referencia en la
-              web. Los minutos se suman a los {settings.deliveryEtaMinutes} min base.
-            </p>
-          </div>
-
-          <AdminForm action={updateCommunesAction} className="space-y-2">
-            {/* Cabecera solo desde `lg`: en móvil cada campo lleva su propio
-                rótulo dentro de la tarjeta (ver `ZoneRow`), porque los inputs
-                se acomodan en dos filas y estos títulos no caerían sobre su
-                columna. */}
-            <div className="text-muted-foreground/70 hidden grid-cols-[1fr_22rem] items-center gap-3 text-[10px] tracking-widest uppercase lg:grid">
-              <span>Sector</span>
-              <div className="flex min-w-0 items-center gap-x-2">
-                <span className="min-w-0 flex-1">Mínimo</span>
-                <span className="shrink-0 opacity-0" aria-hidden="true">
-                  –
-                </span>
-                <span className="min-w-0 flex-1">Máximo</span>
-                <span className="w-16 shrink-0">Min. extra</span>
-                <span className="w-[5.5rem] shrink-0 px-1">Activa</span>
-              </div>
-            </div>
-
-            {zones.map((zone) => (
-              <ZoneRow
-                key={zone.id}
-                id={zone.id}
-                name={zone.name}
-                deliveryFeeMin={zone.deliveryFeeMin}
-                deliveryFeeMax={zone.deliveryFeeMax}
-                extraMinutes={zone.extraMinutes}
-                isActive={zone.isActive}
-              />
-            ))}
-
-            <AdminSubmit className="h-11 w-full">Guardar zonas</AdminSubmit>
-          </AdminForm>
-        </section>
-
         {/* Stats */}
         <section className="border-border bg-card space-y-4 rounded-2xl border p-6 lg:col-start-1 lg:row-start-2">
           <p className="text-muted-foreground text-xs tracking-widest uppercase">Últimos 7 días</p>
@@ -416,7 +313,7 @@ export default async function AdminPage() {
         </section>
 
         {/* Coupons */}
-        <section className="border-border bg-card space-y-4 rounded-2xl border p-4 sm:p-6 lg:col-span-2 lg:col-start-2 lg:row-start-4">
+        <section className="border-border bg-card space-y-4 rounded-2xl border p-4 sm:p-6 lg:col-span-2 lg:col-start-2 lg:row-start-3">
           <div>
             <p className="text-muted-foreground text-xs tracking-widest uppercase">Cupones</p>
             <p className="text-muted-foreground mt-1 text-xs">
