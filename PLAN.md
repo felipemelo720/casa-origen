@@ -2242,6 +2242,12 @@ el `.next/` que sirve producción. Se corrió una vez: ~5 min con la tienda sin
 JS (HTML 200, chunks 400). Restaurado desde `.next.bak` y rebuild. Ver
 «Infraestructura dev».
 
+**Falta**:
+
+- Estado del producto (pausado/archivado) para no tener que eliminarlo.
+- CRUD de categorías.
+- CRUD de combos.
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.
