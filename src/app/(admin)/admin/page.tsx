@@ -202,7 +202,7 @@ export default async function AdminPage() {
               <p className="text-muted-foreground/70 text-[10px] tracking-widest uppercase">
                 {categoryName}
               </p>
-              <div className="border-border divide-border bg-background divide-y overflow-hidden rounded-xl border lg:grid lg:grid-cols-2 lg:divide-y-0">
+              <div className="border-border divide-border bg-background divide-y overflow-hidden rounded-xl border xl:grid xl:grid-cols-2 xl:divide-y-0">
                 {categoryProducts.map((product, index) => {
                   const isUnavailable = product.availability === 'OUT_OF_STOCK';
                   return (
@@ -212,9 +212,9 @@ export default async function AdminPage() {
                         'border-border flex items-center justify-between gap-3 px-3 py-2',
                         // En dos columnas el `divide-y` del padre no separa filas:
                         // el borde lo pone cada celda salvo la primera de su columna.
-                        'lg:border-t',
-                        index < 2 && 'lg:border-t-0',
-                        index % 2 === 1 && 'lg:border-l',
+                        'xl:border-t',
+                        index < 2 && 'xl:border-t-0',
+                        index % 2 === 1 && 'xl:border-l',
                       )}
                     >
                       <div className="flex min-w-0 items-center gap-2">
