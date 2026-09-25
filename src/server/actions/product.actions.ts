@@ -40,7 +40,9 @@ function parseProductForm(formData: FormData) {
     // Fila sin nombre = fila vacía: no se crea la opción.
     const name = String(formData.get(`option_${i}_name`) ?? '').trim();
     if (name === '') continue;
+    const id = String(formData.get(`option_${i}_id`) ?? '').trim();
     options.push({
+      ...(id === '' ? {} : { id }),
       name,
       priceDelta: parseMoney(String(formData.get(`option_${i}_priceDelta`) ?? '')),
       extraPrice: optionalMoney(formData, `option_${i}_extraPrice`),
@@ -176,10 +178,25 @@ export async function updateProductAction(
       throw new ConflictError(`Ya existe un producto con el slug "${parsed.data.slug}".`);
     }
 
+    // El formulario edita un solo grupo de variantes. Un producto con más de
+    // uno (el combo: pizza + bebida) se edita sin tocar sus grupos; si igual
+    // llegan opciones, se rechaza en vez de reemplazar dos grupos por uno.
+    const groups = await productRepository.findVariantGroupsForAdmin(productId);
+    const keepVariants = groups.length > 1;
+    if (keepVariants && parsed.data.options.length > 0) {
+      throw new BusinessRuleError(
+        'Este producto tiene varios grupos de opciones y no se pueden editar desde acá.',
+      );
+    }
+    const ownOptionIds = new Set(groups[0]?.options.map((option) => option.id) ?? []);
+    if (parsed.data.options.some((option) => option.id && !ownOptionIds.has(option.id))) {
+      throw new BusinessRuleError('Una de las opciones ya no existe. Recarga la página.');
+    }
+
     const image = await saveProductImage(formData, parsed.data.slug);
     const previous = image !== undefined ? await productRepository.findImageById(productId) : null;
     const product = await withImageRollback(image, () =>
-      productRepository.updateFromAdmin(productId, parsed.data, image),
+      productRepository.updateFromAdmin(productId, parsed.data, image, { keepVariants }),
     );
     if (previous) await deleteProductImage(previous.image);
 

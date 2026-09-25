@@ -11,6 +11,12 @@ import { z } from 'zod';
 export const MAX_VARIANT_OPTIONS = 6;
 
 const optionSchema = z.object({
+  /**
+   * Id de la opción que se está editando; ausente en una fila nueva. Editar
+   * conserva el id: los carritos guardados en `localStorage` referencian la
+   * opción por id, y recrearla dejaría esos carritos rechazados en el checkout.
+   */
+  id: z.string().min(1).optional(),
   name: z.string().trim().min(1, 'Nombra la opción.').max(40),
   priceDelta: z.number().int(),
   extraPrice: z.number().int().min(0).nullable(),

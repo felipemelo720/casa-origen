@@ -299,14 +299,32 @@ export const productRepository = {
     });
   },
 
+  /** Grupos y opciones actuales, para validar la edición antes de escribir. */
+  async findVariantGroupsForAdmin(productId: string) {
+    return prisma.variantGroup.findMany({
+      where: { productId },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, options: { select: { id: true } } },
+    });
+  },
+
   /**
-   * El grupo de variantes se reemplaza entero en vez de diffearse: mismo
-   * criterio que tags/ingredientes en el seed. Borrar y recrear es más simple
-   * y más barato que reconciliar altas/bajas/ediciones de cada opción.
+   * Las opciones se diffean por id en vez de borrarse y recrearse: el carrito
+   * del cliente guarda los ids en `localStorage`, y un id nuevo por cada
+   * edición dejaba esos carritos rechazados en el checkout. Fila con id se
+   * actualiza, sin id se crea, id que no vino se borra.
+   *
+   * `keepVariants`: el producto tiene más de un grupo (el combo) y el
+   * formulario solo sabe editar uno, así que sus grupos no se tocan.
    */
-  async updateFromAdmin(id: string, input: ProductFormInput, image: string | null | undefined) {
+  async updateFromAdmin(
+    id: string,
+    input: ProductFormInput,
+    image: string | null | undefined,
+    { keepVariants = false }: { keepVariants?: boolean } = {},
+  ) {
     return prisma.$transaction(async (tx) => {
-      await tx.variantGroup.deleteMany({ where: { productId: id } }); // cascada a options
+      if (!keepVariants) await syncVariantGroup(tx, id, input);
       return tx.product.update({
         where: { id },
         data: {
@@ -321,7 +339,6 @@ export const productRepository = {
           allowNotes: input.allowNotes,
           isVisible: input.isVisible,
           categoryId: input.categoryId,
-          variantGroups: variantGroupsCreateInput(input),
         },
       });
     });
@@ -355,4 +372,48 @@ function variantGroupsCreateInput(
       },
     ],
   };
+}
+
+/** Deja el único grupo de variantes del producto igual a lo que mandó el formulario. */
+async function syncVariantGroup(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  input: ProductFormInput,
+): Promise<void> {
+  const group = await tx.variantGroup.findFirst({
+    where: { productId },
+    orderBy: { sortOrder: 'asc' },
+    select: { id: true },
+  });
+
+  if (input.options.length === 0) {
+    if (group) await tx.variantGroup.delete({ where: { id: group.id } }); // cascada a options
+    return;
+  }
+
+  const name = input.variantGroupName ?? 'Opciones';
+  const groupId = group
+    ? (await tx.variantGroup.update({ where: { id: group.id }, data: { name } })).id
+    : (await tx.variantGroup.create({ data: { productId, name } })).id;
+
+  const keptIds = input.options.flatMap((option) => (option.id ? [option.id] : []));
+  await tx.variantOption.deleteMany({ where: { groupId, id: { notIn: keptIds } } });
+
+  for (const [index, option] of input.options.entries()) {
+    const data = {
+      name: option.name,
+      priceDelta: option.priceDelta,
+      extraPrice: option.extraPrice,
+      extraPremiumPrice: option.extraPremiumPrice,
+      isAvailable: option.isAvailable,
+      isDefault: index === 0,
+      sortOrder: index,
+    };
+    // `groupId` en el where: un id ajeno no puede tocar la opción de otro producto.
+    const updated = option.id
+      ? await tx.variantOption.updateMany({ where: { id: option.id, groupId }, data })
+      : null;
+    if (!updated || updated.count === 0)
+      await tx.variantOption.create({ data: { ...data, groupId } });
+  }
 }

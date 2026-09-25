@@ -46,7 +46,9 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
               allowNotes: product.allowNotes,
               isVisible: product.isVisible,
               variantGroupName: variantGroup?.name ?? null,
+              variantsLocked: product.variantGroups.length > 1,
               options: (variantGroup?.options ?? []).map((option) => ({
+                id: option.id,
                 name: option.name,
                 priceDelta: option.priceDelta,
                 extraPrice: option.extraPrice,

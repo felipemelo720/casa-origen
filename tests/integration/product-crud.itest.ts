@@ -46,7 +46,7 @@ function imageFile(): File {
 
 function productForm(
   fields: { categoryId: string; slug?: string; name?: string; price?: string },
-  opts: { image?: File; options?: { name: string; priceDelta: string }[] } = {},
+  opts: { image?: File; options?: { id?: string; name: string; priceDelta: string }[] } = {},
 ): FormData {
   const formData = new FormData();
   formData.set('name', fields.name ?? 'Pizza de prueba');
@@ -57,6 +57,7 @@ function productForm(
   if (opts.image) formData.set('image', opts.image);
   if (opts.options) formData.set('variantGroupName', 'Tamaño');
   opts.options?.forEach((option, i) => {
+    if (option.id) formData.set(`option_${i}_id`, option.id);
     formData.set(`option_${i}_name`, option.name);
     formData.set(`option_${i}_priceDelta`, option.priceDelta);
     formData.set(`option_${i}_available`, 'on');
@@ -210,6 +211,134 @@ describe('CRUD de productos (integración)', () => {
       expect(product.price).toBe(10990);
       expect(product.variantGroups).toHaveLength(1);
       expect(product.variantGroups[0]?.options.map((o) => o.name)).toEqual(['Individual']);
+    });
+
+    it('conserva el id de la opción editada y borra la que no vino', async () => {
+      await signInAsAdmin();
+      const cat = await categoryId();
+      await createProductAction(
+        null,
+        productForm(
+          { categoryId: cat },
+          {
+            options: [
+              { name: '24 cm', priceDelta: '0' },
+              { name: '32 cm', priceDelta: '4000' },
+            ],
+          },
+        ),
+      );
+      const before = await findTestProduct();
+      const [small, large] = before.variantGroups[0]?.options ?? [];
+
+      // Un carrito guardado referencia `large.id`: tiene que seguir existiendo.
+      const result = await updateProductAction(
+        before.id,
+        null,
+        productForm(
+          { categoryId: cat },
+          {
+            options: [
+              { id: large?.id, name: '32 cm', priceDelta: '4500' },
+              { name: '40 cm', priceDelta: '9000' },
+            ],
+          },
+        ),
+      );
+
+      expect(result.ok).toBe(true);
+      const after = await findTestProduct();
+      expect(after.variantGroups).toHaveLength(1);
+      expect(after.variantGroups[0]?.id).toBe(before.variantGroups[0]?.id);
+      const options = after.variantGroups[0]?.options ?? [];
+      expect(options.map((o) => [o.name, o.priceDelta, o.isDefault])).toEqual([
+        ['32 cm', 4500, true],
+        ['40 cm', 9000, false],
+      ]);
+      expect(options[0]?.id).toBe(large?.id);
+      expect(options.some((o) => o.id === small?.id)).toBe(false);
+    });
+
+    it('rechaza el id de una opción de otro producto', async () => {
+      await signInAsAdmin();
+      const cat = await categoryId();
+      await createProductAction(
+        null,
+        productForm({ categoryId: cat }, { options: [{ name: 'Mediana', priceDelta: '0' }] }),
+      );
+      await createProductAction(
+        null,
+        productForm(
+          { categoryId: cat, slug: `${SLUG}-otro` },
+          { options: [{ name: 'Grande', priceDelta: '0' }] },
+        ),
+      );
+      const { id } = await findTestProduct();
+      const other = await findTestProduct(`${SLUG}-otro`);
+      const foreignId = other.variantGroups[0]?.options[0]?.id;
+
+      const result = await updateProductAction(
+        id,
+        null,
+        productForm(
+          { categoryId: cat },
+          { options: [{ id: foreignId, name: 'X', priceDelta: '0' }] },
+        ),
+      );
+
+      expect(result.ok).toBe(false);
+      expect((await findTestProduct(`${SLUG}-otro`)).variantGroups[0]?.options[0]?.name).toBe(
+        'Grande',
+      );
+    });
+
+    it('un producto con dos grupos (combo) se edita sin perder sus grupos', async () => {
+      await signInAsAdmin();
+      const cat = await categoryId();
+      await prisma.product.create({
+        data: {
+          name: 'Combo de prueba',
+          slug: SLUG,
+          price: 7200,
+          categoryId: cat,
+          variantGroups: {
+            create: [
+              {
+                name: 'Elige tu pizza',
+                sortOrder: 0,
+                options: { create: [{ name: 'Napolitana' }] },
+              },
+              {
+                name: 'Elige tu bebida',
+                sortOrder: 1,
+                options: { create: [{ name: 'Coca-Cola' }] },
+              },
+            ],
+          },
+        },
+      });
+      const { id } = await findTestProduct();
+
+      const renamed = await updateProductAction(
+        id,
+        null,
+        productForm({ categoryId: cat, name: 'Combo renombrado', price: '7200' }),
+      );
+      expect(renamed.ok).toBe(true);
+      const after = await findTestProduct();
+      expect(after.name).toBe('Combo renombrado');
+      expect(after.variantGroups.map((g) => g.name).sort()).toEqual([
+        'Elige tu bebida',
+        'Elige tu pizza',
+      ]);
+
+      const withOptions = await updateProductAction(
+        id,
+        null,
+        productForm({ categoryId: cat }, { options: [{ name: 'Mediana', priceDelta: '0' }] }),
+      );
+      expect(withOptions.ok).toBe(false);
+      expect((await findTestProduct()).variantGroups).toHaveLength(2);
     });
 
     it('conserva su propio slug pero rechaza el de otro producto', async () => {

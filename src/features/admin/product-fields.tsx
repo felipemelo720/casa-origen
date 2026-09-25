@@ -7,6 +7,7 @@ import { MAX_VARIANT_OPTIONS } from '@/schemas/product.schema';
 import { formatMoney } from '@/lib/money';
 
 type OptionValues = {
+  id: string;
   name: string;
   priceDelta: number;
   extraPrice: number | null;
@@ -28,6 +29,8 @@ type ProductFieldsValues = {
   isVisible: boolean;
   variantGroupName: string | null;
   options: OptionValues[];
+  /** Más de un grupo de opciones (el combo): este formulario no los edita. */
+  variantsLocked?: boolean;
 };
 
 /**
@@ -178,31 +181,38 @@ export function ProductFields({
         />
       </div>
 
-      <div className="border-border space-y-3 border-t pt-4">
-        <Field
-          label="Nombre del grupo de tamaños"
-          hint='Ej. "Tamaño". Vacío si el producto no tiene tamaños.'
-        >
-          <Input
-            name="variantGroupName"
-            maxLength={40}
-            placeholder="Tamaño"
-            defaultValue={product?.variantGroupName ?? undefined}
-            className="h-11 sm:max-w-xs"
-          />
-        </Field>
-
-        <p className="text-muted-foreground text-xs">
-          Hasta {MAX_VARIANT_OPTIONS} tamaños. El primero con nombre es el tamaño base: su
-          diferencia de precio va en 0.
+      {product?.variantsLocked ? (
+        <p className="border-border text-muted-foreground border-t pt-4 text-sm">
+          Este producto tiene varios grupos de opciones (ej. pizza + bebida). Se editan desde el
+          seed, no desde acá: guardar no los cambia.
         </p>
+      ) : (
+        <div className="border-border space-y-3 border-t pt-4">
+          <Field
+            label="Nombre del grupo de tamaños"
+            hint='Ej. "Tamaño". Vacío si el producto no tiene tamaños.'
+          >
+            <Input
+              name="variantGroupName"
+              maxLength={40}
+              placeholder="Tamaño"
+              defaultValue={product?.variantGroupName ?? undefined}
+              className="h-11 sm:max-w-xs"
+            />
+          </Field>
 
-        <div className="space-y-2">
-          {Array.from({ length: MAX_VARIANT_OPTIONS }, (_, i) => (
-            <OptionRow key={i} index={i} option={options[i]} />
-          ))}
+          <p className="text-muted-foreground text-xs">
+            Hasta {MAX_VARIANT_OPTIONS} tamaños. El primero con nombre es el tamaño base: su
+            diferencia de precio va en 0.
+          </p>
+
+          <div className="space-y-2">
+            {Array.from({ length: MAX_VARIANT_OPTIONS }, (_, i) => (
+              <OptionRow key={i} index={i} option={options[i]} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -210,6 +220,8 @@ export function ProductFields({
 function OptionRow({ index, option }: { index: number; option?: OptionValues }) {
   return (
     <div className="border-border grid gap-2 rounded-xl border p-2.5 sm:grid-cols-[1fr_7rem_7rem_7rem_auto] sm:items-end sm:gap-2">
+      {/* Conserva el id al editar: los carritos guardados lo referencian. */}
+      {option && <input type="hidden" name={`option_${index}_id`} value={option.id} />}
       <Field label={`Tamaño ${index + 1}`}>
         <Input
           name={`option_${index}_name`}
