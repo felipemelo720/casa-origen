@@ -31,8 +31,11 @@ export const revalidate = 60;
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await settingsRepository.get();
   return {
-    title: settings.seoTitle ?? settings.name,
+    // `absolute`: el `seoTitle` ya lleva el nombre, y el template del layout
+    // raíz lo repetía («Casa Origen — … — Casa Origen»).
+    title: { absolute: settings.seoTitle ?? settings.name },
     description: settings.seoDescription ?? settings.description ?? undefined,
+    alternates: { canonical: '/' },
   };
 }
 
@@ -109,10 +112,10 @@ export default async function HomePage() {
         description={settings.seoDescription ?? settings.description}
         image={settings.seoImage ?? hero?.image ?? null}
         phone={settings.phone}
-        address={settings.address}
         instagramUrl={settings.instagramUrl}
         facebookUrl={settings.facebookUrl}
         schedule={schedule}
+        areaServed={zones.map((zone) => zone.name)}
       />
 
       {/* Sin `kicker`: era `settings.tagline` («Cocina de origen, sabor de

@@ -19,10 +19,10 @@ const playfairDisplay = Playfair_Display({
 export const metadata: Metadata = {
   metadataBase: new URL(publicEnv.NEXT_PUBLIC_APP_URL),
   title: {
-    default: `${publicEnv.NEXT_PUBLIC_APP_NAME} — Cocina de origen, delivery en línea`,
+    default: `${publicEnv.NEXT_PUBLIC_APP_NAME} — Pizzas a domicilio en Paine`,
     template: `%s — ${publicEnv.NEXT_PUBLIC_APP_NAME}`,
   },
-  description: 'Pide en línea platos de cocina chilena contemporánea. Delivery y retiro en tienda.',
+  description: 'Pizzas artesanales con delivery en Paine. Pide en línea o retira en tienda.',
   applicationName: publicEnv.NEXT_PUBLIC_APP_NAME,
   manifest: '/manifest.webmanifest',
   icons: {

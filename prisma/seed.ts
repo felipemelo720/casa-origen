@@ -29,6 +29,10 @@ async function seedSettings() {
       phone: '+56 9 2049 9873',
       whatsapp: '+56920499873',
       deliveryEtaMinutes: 40,
+      address: null,
+      seoTitle: 'Casa Origen — Pizzas a domicilio en Paine',
+      seoDescription:
+        'Pizzas artesanales de 24 y 32 cm con delivery en Paine, Champa, Hospital, Viluco y Huelquén. Pide en línea o retira en tienda.',
     },
     create: {
       id: 'singleton',
@@ -40,7 +44,8 @@ async function seedSettings() {
       email: 'contacto@casaorigen.cl',
       phone: '+56 9 2049 9873',
       whatsapp: '+56920499873',
-      address: 'Av. Providencia 1234, Providencia, Santiago',
+      // La dirección no se publica: reparto sin atención en local.
+      address: null,
       instagramUrl: 'https://instagram.com/casaorigen',
       acceptingOrders: true,
       defaultDeliveryFee: 2500,
@@ -51,9 +56,9 @@ async function seedSettings() {
       pickupEtaMinutes: 20,
       taxRate: 19,
       taxIncluded: true,
-      seoTitle: 'Casa Origen — Cocina chilena con delivery',
+      seoTitle: 'Casa Origen — Pizzas a domicilio en Paine',
       seoDescription:
-        'Pide en línea platos de cocina chilena contemporánea. Delivery y retiro en tienda.',
+        'Pizzas artesanales de 24 y 32 cm con delivery en Paine, Champa, Hospital, Viluco y Huelquén. Pide en línea o retira en tienda.',
     },
   });
 }

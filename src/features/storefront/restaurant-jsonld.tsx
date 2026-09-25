@@ -6,10 +6,11 @@ type Props = {
   description: string | null;
   image: string | null;
   phone: string | null;
-  address: string | null;
   instagramUrl: string | null;
   facebookUrl: string | null;
   schedule: ScheduleDay[];
+  /** Nombres de las zonas de despacho activas. */
+  areaServed: string[];
 };
 
 /** `Date#getDay` index to the day names schema.org expects. */
@@ -32,10 +33,10 @@ export function RestaurantJsonLd({
   description,
   image,
   phone,
-  address,
   instagramUrl,
   facebookUrl,
   schedule,
+  areaServed,
 }: Props) {
   const url = publicEnv.NEXT_PUBLIC_APP_URL;
   const sameAs = [instagramUrl, facebookUrl].filter((link): link is string => Boolean(link));
@@ -52,16 +53,23 @@ export function RestaurantJsonLd({
     ...(description ? { description } : {}),
     ...(image ? { image: absoluteUrl(image, url) } : {}),
     ...(phone ? { telephone: phone } : {}),
-    ...(address
-      ? {
-          address: {
-            '@type': 'PostalAddress',
-            streetAddress: address,
-            addressCountry: 'CL',
-          },
-        }
-      : {}),
+    // Sin calle a propósito: el local no atiende público y la dirección no se
+    // publica. Google lo trata como negocio de área de servicio (ver areaServed).
+    address: {
+      '@type': 'PostalAddress',
+      addressLocality: 'Paine',
+      addressRegion: 'Región Metropolitana',
+      addressCountry: 'CL',
+    },
     ...(sameAs.length > 0 ? { sameAs } : {}),
+    // SEO local: «pizza Champa», «pizza Viluco». La zona rural guarda sus
+    // localidades en un solo `name` separado por comas; cada una va aparte.
+    areaServed: [
+      { '@type': 'City', name: 'Paine' },
+      ...areaServed
+        .flatMap((zone) => zone.split(', '))
+        .map((place) => ({ '@type': 'Place', name: place })),
+    ],
     // Un `OpeningHoursSpecification` por turno, no por día: schema.org no tiene
     // forma de expresar un corte al mediodía dentro de una sola franja, y
     // declarar 12:30–22:00 le diría a Google que a las 16:00 estamos abiertos.

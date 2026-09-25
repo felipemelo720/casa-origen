@@ -2248,6 +2248,52 @@ JS (HTML 200, chunks 400). Restaurado desde `.next.bak` y rebuild. Ver
 - CRUD de categorías.
 - CRUD de combos.
 
+## Editar un producto ya no rompe carritos ni el combo (2026-09-25)
+
+**Problema.** `updateFromAdmin` borraba el grupo de variantes y lo recreaba.
+Dos consecuencias: (1) cada edición daba ids nuevos a los tamaños, y un carrito
+guardado en `localStorage` con los ids viejos quedaba rechazado en el checkout;
+(2) el formulario solo edita un grupo, así que guardar el Combo Individual
+(pizza + bebida) borraba sus dos grupos y dejaba uno o ninguno.
+
+**Cambio.** Capas: schema, action, repository, UI.
+
+- Opciones diffeadas por id (`syncVariantGroup`): con id se actualiza, sin id
+  se crea, la que no vino se borra. El grupo conserva su id. Cada fila del form
+  lleva `option_N_id` oculto.
+- Producto con más de un grupo: el form muestra un aviso en lugar de los
+  tamaños, y el repositorio no toca los grupos. Si igual llegan opciones, la
+  action rechaza. También rechaza un id de opción que no sea de ese producto.
+
+**Tradeoff.** Los grupos del combo siguen editándose solo desde el seed.
+Borrar un tamaño sigue invalidando los carritos que lo tenían: eso es
+intencional, el tamaño ya no existe.
+
+**Verificado.** `tsc`, lint, `format:check`, 343 unit + 52 integración (3
+nuevos). Sin build ni navegador; no desplegado.
+
+## SEO del home: title, canonical y zonas en el JSON-LD (2026-09-25)
+
+- `seoTitle`/`seoDescription` decían «cocina chilena»: ahora «Pizzas a
+  domicilio en Paine» y una descripción con los sectores. Van en `create` **y**
+  `update` del upsert del seed, más un `UPDATE` directo en la base. El default
+  del layout raíz también dejó de decir «cocina chilena».
+- El home usa `title.absolute`: el template del layout repetía el nombre.
+- `alternates.canonical: '/'` en el home (solo ahí; el layout raíz lo habría
+  heredado a todas las rutas).
+- JSON-LD con `areaServed`: Paine + una `Place` por zona activa. La zona rural
+  se parte por comas en sus localidades. Cierra el pendiente del 2026-08-10.
+
+**Dirección privada.** La dirección no se publica (reparto sin atención en
+local). `address` quedó `null` en la base y en el seed, y el JSON-LD ya no la
+lee: publica solo `addressLocality: Paine` + región + país, y las zonas en
+`areaServed`. En Google Business Profile hay que ocultar la dirección y
+declarar área de servicio, a mano. Tradeoff: sin pin exacto se puede salir más
+abajo en «cerca de mí».
+
+**Verificado.** `tsc`, lint, 343 unit. Sin build ni navegador; no desplegado.
+Hasta el deploy, producción muestra el title nuevo con el nombre duplicado.
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.
