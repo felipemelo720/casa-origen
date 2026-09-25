@@ -23,11 +23,11 @@ Sin `TG_TOKEN` el step de CI sale con 0 y no rompe nada — simplemente no avisa
 
 ## 2. Env del CT de producción (deploy)
 
-Otra máquina: `10.10.10.12`, cwd `/var/www/casa-origen`. No se llega desde el
-repo local.
+Esta misma máquina (`10.10.10.12`), cwd `/var/www/casa-origen`. Sin `sudo`: se
+corre como root.
 
 ```bash
-sudo nano /var/www/casa-origen/.env.production
+nano /var/www/casa-origen/.env.production
 ```
 
 Agregar al final:

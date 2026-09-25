@@ -24,8 +24,10 @@ una pantalla ilegible también.
 
 ## 2. Contexto de producto (no lo re-descubras)
 
-- Pizzería en Paine, Chile. Un operador. Sin login de clientes.
-- Dos páginas: `/` (landing + carrito + checkout) y `/admin`.
+- Pizzería en Paine, Chile. Un operador. Cuenta de cliente opcional; el
+  guest checkout se mantiene.
+- Tres páginas: `/` (landing + carrito + checkout), `/cuenta` y `/admin`,
+  más fichas `/producto/[slug]` y `/promo/[slug]`.
 - El pedido se guarda en Postgres y **además** abre WhatsApp. WhatsApp es
   aviso, no fuente de verdad.
 - Público: móvil Android de gama media, red 4G irregular. **Mobile-first no es
@@ -112,8 +114,8 @@ El sistema ya existe. Se extiende, no se reinventa.
 - **Vivo vs. cacheado:** la landing es estática con `revalidate = 60`. Lo que
   necesita ser inmediato va por route handler (`/api/open-state`:
   `dynamic = 'force-dynamic'` + `Cache-Control: no-store`) y polling con
-  fallback al último estado conocido. No SSE (descartado: `proxy_buffering
-off` en Nginx + conexión viva por visitante).
+  fallback al último estado conocido. No SSE (descartado: una conexión
+  viva por visitante en un CT de 2 vCPU).
 - **SEO:** `metadata` en el layout, JSON-LD server-side con `<` escapado
   antes de inyectar (defensa contra `</script>` guardado desde el admin).
 
@@ -212,7 +214,7 @@ elogios de relleno.
 
 ## 11. Lo que no se repite acá
 
-Infra dev (Postgres `co-pg` en 5435, dev en 3001, `psql`), comandos, gotchas
+Infra dev (Postgres, worktree para probar, deploy por timer, `psql`), comandos, gotchas
 (`tsx` vs `server-only`, Prisma Client viejo en memoria,
 `noUncheckedIndexedAccess`, imágenes de Unsplash) y el estilo de respuesta
 viven en `CLAUDE.md`, que se carga en la misma sesión que este archivo.

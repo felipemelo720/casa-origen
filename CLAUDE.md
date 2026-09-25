@@ -24,10 +24,10 @@ Código, comandos y errores exactos, verbatim.
 
 ## Reglas duras
 
-- **Nunca `npm run build` con `npm run dev` levantado.** El build sobrescribe
-  `.next/` y deja al dev sirviendo chunks 404 como `text/plain`. En el browser
-  eso aparece como `Runtime Error: [object Event]`, sin stack. Si pasa:
-  `rm -rf .next` y reiniciar dev.
+- **Nunca `npm run dev` ni `npm run build` en `/var/www/casa-origen`.**
+  Producción (`next start`) sirve desde ese mismo `.next/`; dev o build lo
+  reescriben y la tienda queda con chunks 404 (`Runtime Error: [object Event]`,
+  sin stack). Para probar: `git worktree` aparte (ver Infra dev).
 - Dinero: enteros, nunca float ni Decimal.
 - Precios siempre recalculados server-side en `pricing.service.ts`. El cliente
   manda selecciones (ids + cantidades), nunca precios.
@@ -50,29 +50,31 @@ Código, comandos y errores exactos, verbatim.
 - **No hay `.env`.** Los secretos viven en `.env.production`, que Next lee por
   su cuenta y el CLI de Prisma **no**: `migrate deploy` y `db seed` necesitan
   `DATABASE_URL` explícito delante del comando.
-- Dev server: 3000–3006 están ocupados por otros proyectos y por el propio
-  Casa Origen en producción. Levantar dev con puerto explícito:
-  `npm run dev -- -p 3010`. Sin `-p`, Next va probando hacia arriba y el
-  puerto cambia de sesión en sesión.
+- Probar cambios: `git worktree` aparte, `node_modules` enlazado, build +
+  `next start -p 3010` con las variables de `.env.test` (base
+  `casaorigen_test`). 3000–3006 están ocupados. Dev tampoco arranca en el
+  repo: no hay `.env` y dev no lee `.env.production`.
 - **Producción en esta misma máquina**: pm2, app `casaorigen`,
-  `npm start -- -p 3006`, cwd `/var/www/casa-origen`. Es lo que se ve en
-  `http://10.10.10.12:3006`. Un cambio en el código **no aparece** ahí hasta
-  rebuild + restart.
+  `npm start -- -p 3006`, cwd `/var/www/casa-origen`
+  (`http://10.10.10.12:3006`).
+- **Deploy por timer** (`casaorigen-deploy.timer`, cada 5 min,
+  `scripts/deploy.sh`): si `origin/main` avanzó y su CI está verde, pull
+  `--ff-only`, build, restart, rollback a `.next.prev` si falla. Un commit
+  local **sin push** o el tree sucio bloquean el deploy y disparan alerta
+  (`histories diverged` / `working tree is dirty`).
 - `psql` directo (no hay `sudo` en el CT, se corre como root):
   `su postgres -c "psql -d casaorigen -c '...'"`
 
 ## Comandos
 
 ```bash
-npm run dev -- -p 3010
 npx prisma studio
 npx prisma migrate dev --name <nombre>
 npx prisma db seed
-npx tsc --noEmit && npm run lint && npm run build   # dev apagado
+npx tsc --noEmit && npm run lint && npx vitest run   # build solo en worktree
 
-# Desplegar a producción (3006). Parar pm2 primero: el build sobrescribe
-# .next/ bajo los pies de `next start` y deja chunks 404.
-pm2 stop casaorigen && rm -rf .next && npm run build && pm2 start casaorigen
+# Desplegar: git push a main. El timer despliega tras el CI verde.
+journalctl -u casaorigen-deploy.service -n 20   # estado del último intento
 ```
 
 ## Gotchas

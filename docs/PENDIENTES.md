@@ -1,5 +1,8 @@
 # Pendientes — 2026-08-09
 
+> Foto al 2026-08-09, no se mantiene al día. El estado vigente está en
+> `PLAN.md`; varios puntos de acá ya se cerraron después.
+
 Estado al cierre de la sesión de tests de integración + avisos.
 
 ## Bloquea el push
@@ -39,7 +42,7 @@ Estado al cierre de la sesión de tests de integración + avisos.
 3. Rotar el token — se pegó en un chat con IA, tratarlo como comprometido.
 4. `gh secret set TG_TOKEN`.
 5. `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` en `.env.production` del CT
-   (`10.10.10.12`, otra máquina).
+   (`10.10.10.12`, esta misma máquina).
 
 ## Tests que faltan
 
