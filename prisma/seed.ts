@@ -29,6 +29,8 @@ async function seedSettings() {
       phone: '+56 9 2049 9873',
       whatsapp: '+56920499873',
       deliveryEtaMinutes: 40,
+      // Decisión 2026-09-25: envío gratis desde $50.000 (antes 35.000).
+      freeDeliveryFrom: 50000,
       address: null,
       seoTitle: 'Casa Origen — Pizzas a domicilio en Paine',
       seoDescription:
@@ -49,7 +51,7 @@ async function seedSettings() {
       instagramUrl: 'https://instagram.com/casaorigen',
       acceptingOrders: true,
       defaultDeliveryFee: 2500,
-      freeDeliveryFrom: 35000,
+      freeDeliveryFrom: 50000,
       minOrderAmount: 0,
       defaultPrepMinutes: 25,
       deliveryEtaMinutes: 40,
@@ -834,7 +836,7 @@ async function seedCatalogue() {
 async function seedBanners() {
   const banners = [
     {
-      title: 'Cocina de origen',
+      title: 'Pizzas artesanales en Paine',
       subtitle: 'Productos de temporada, técnica clásica y fuego lento.',
       // Foto propia (public/hero/), no Unsplash: un 404 de imagen en el hero es
       // `Runtime Error: [object Event]` sin stack. Es vertical, así que el marco

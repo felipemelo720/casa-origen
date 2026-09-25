@@ -11,6 +11,8 @@ import { DuoPromoCard } from '@/features/promo/duo-promo-card';
 import { buildDuoPromoView } from '@/features/promo/duo-promo-view';
 import { CouponBanner } from '@/features/storefront/coupon-banner';
 import { EventOrders } from '@/features/storefront/event-orders';
+import { Faq } from '@/features/storefront/faq';
+import { buildFaq } from '@/features/storefront/faq-content';
 import { StorefrontHero } from '@/features/storefront/hero';
 import { HowToOrder } from '@/features/storefront/how-to-order';
 import { OpeningHours } from '@/features/storefront/opening-hours';
@@ -22,6 +24,7 @@ import { getOpenState, getWeeklySchedule } from '@/server/services/schedule.serv
 import {
   bannerRepository,
   communeRepository,
+  paymentMethodRepository,
   settingsRepository,
 } from '@/server/repositories/operations.repository';
 import { couponRepository, promotionRepository } from '@/server/repositories/promotion.repository';
@@ -51,6 +54,7 @@ export default async function HomePage() {
     featuredBundle,
     comboProduct,
     publicCoupon,
+    paymentMethods,
   ] = await Promise.all([
     settingsRepository.get(),
     bannerRepository.findActiveByPlacement('HERO'),
@@ -66,6 +70,7 @@ export default async function HomePage() {
     // `isVisible: false`, so the menu pass cannot see it.
     productRepository.findComboPromo(),
     couponRepository.findPublicActive(),
+    paymentMethodRepository.findAllActive(),
   ]);
 
   const hero = heroBanners[0];
@@ -261,6 +266,18 @@ export default async function HomePage() {
       >
         <OpeningHours schedule={schedule} open={open} />
       </section>
+
+      {/* Al final: responde lo que queda después de ver carta y horario, y no
+          empuja el menú hacia abajo. Sale de los mismos datos del checkout. */}
+      <Faq
+        items={buildFaq({
+          deliveryEnabled: settings.deliveryEnabled,
+          freeDeliveryFrom: settings.freeDeliveryFrom,
+          zones,
+          schedule,
+          paymentMethods: paymentMethods.map((method) => method.name),
+        })}
+      />
     </div>
   );
 }

@@ -2314,6 +2314,39 @@ atrasado (`revalidate`).
 
 **Verificado.** `tsc`, lint, prettier, 343 unit. Sin build ni navegador.
 
+## FAQ del home con `FAQPage` (2026-09-25)
+
+Hipótesis: el cliente llega desde Google buscando «pizza Champa» y la landing no
+responde en texto «¿llegan?», «¿cuánto sale el despacho?», «¿cómo pago?».
+
+- `buildFaq` (`src/features/storefront/faq-content.ts`), puro: arma las
+  preguntas con los mismos datos del checkout (zonas activas, banda de
+  despacho, `freeDeliveryFrom`, horario, medios de pago activos). Si el admin
+  apaga una zona, el delivery o un medio de pago, la respuesta cambia sola.
+  Pregunta sin respuesta verdadera no se muestra.
+- `Faq` (server component, `<details>` nativo, cero JS) al final del home,
+  después de horarios. El JSON-LD `FAQPage` sale de los mismos `items`.
+- Una query más en el `Promise.all`: `paymentMethodRepository.findAllActive()`.
+- Tests: 9 unit (`faq-content.test.ts`), 5 de integración
+  (`tests/integration/faq.itest.ts`: zona apagada, delivery apagado y medio de
+  pago inactivo desde la DB real).
+
+- Horario agrupado por tramos de días con el mismo turno («Lunes a sábado:
+  …»). Cuenta: solo beneficios reales (historial, pedidos de invitado del mismo
+  teléfono, premios en futuro como en `/cuenta`).
+- **Envío gratis desde $50.000** (antes 35.000; cierra el pendiente 16 de
+  `docs/PENDIENTES.md`). Seed actualizado en `update` y `create`; en la DB de
+  producción va por SQL (no hay campo en /admin).
+- **h1:** el banner HERO pasó a «Pizzas artesanales en Paine» por SQL en
+  producción (no hay action para banners) y en `prisma/seed.ts`, que busca el
+  banner por `title`.
+
+Tradeoff: el horario aparece dos veces (tabla y FAQ); la FAQ empuja el footer
+hacia abajo, no el menú.
+
+**Verificado.** `tsc`, lint, 354 unit, 57 integración. Sin build ni navegador
+(360px/dark/teclado sin revisar).
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.
