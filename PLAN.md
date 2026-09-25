@@ -2294,6 +2294,26 @@ abajo en «cerca de mí».
 **Verificado.** `tsc`, lint, 343 unit. Sin build ni navegador; no desplegado.
 Hasta el deploy, producción muestra el title nuevo con el nombre duplicado.
 
+## SEO del home: carta en el JSON-LD y `lastmod` (2026-09-25)
+
+- JSON-LD: `hasMenu` pasó de URL a `Menu` con `MenuSection` por categoría y
+  `MenuItem` por producto disponible, con `AggregateOffer.lowPrice` en CLP
+  (precio de entrada, no precio único: la 32 cm cuesta más). Sale de
+  `menuByCategory`, ya calculado: cero queries nuevas. El componente recibe un
+  view model estrecho (`MenuSection`), no `ProductDetail`.
+- Sitemap: el home lleva `lastModified` = el `updatedAt` más reciente de los
+  productos visibles.
+- `/cuenta` ya tenía `robots: noindex`; no se tocó.
+- h1 del home («Cocina de origen») sale del título del banner HERO: se cambia
+  desde /admin, sin código. Pendiente de Felipe.
+- FAQ + `FAQPage`: postergado a otra sesión.
+
+Tradeoff: el HTML del home crece con la carta serializada (~unos KB). Productos
+agotados no se declaran, así que el menú de Google puede quedar hasta 60 s
+atrasado (`revalidate`).
+
+**Verificado.** `tsc`, lint, prettier, 343 unit. Sin build ni navegador.
+
 ## Infraestructura dev
 
 Postgres **nativo** en el CT, `127.0.0.1:5432`, base y usuario `casaorigen`.

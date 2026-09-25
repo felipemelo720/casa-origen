@@ -11,6 +11,13 @@ type Props = {
   schedule: ScheduleDay[];
   /** Nombres de las zonas de despacho activas. */
   areaServed: string[];
+  menu: MenuSection[];
+};
+
+/** View model estrecho de la carta: el JSON-LD no necesita el producto entero. */
+export type MenuSection = {
+  name: string;
+  items: { name: string; description: string | null; path: string; priceFrom: number }[];
 };
 
 /** `Date#getDay` index to the day names schema.org expects. */
@@ -37,6 +44,7 @@ export function RestaurantJsonLd({
   facebookUrl,
   schedule,
   areaServed,
+  menu,
 }: Props) {
   const url = publicEnv.NEXT_PUBLIC_APP_URL;
   const sameAs = [instagramUrl, facebookUrl].filter((link): link is string => Boolean(link));
@@ -49,7 +57,28 @@ export function RestaurantJsonLd({
     servesCuisine: 'Pizza',
     priceRange: '$$',
     acceptsReservations: false,
-    hasMenu: `${url}/#menu`,
+    // La carta completa, para que «pizza Paine precio» encuentre precios reales.
+    // `AggregateOffer.lowPrice` y no `Offer.price`: el precio de entrada es el
+    // del tamaño más chico, y declararlo como precio único mentiría con la 32 cm.
+    hasMenu: {
+      '@type': 'Menu',
+      url: `${url}/#menu`,
+      hasMenuSection: menu.map((section) => ({
+        '@type': 'MenuSection',
+        name: section.name,
+        hasMenuItem: section.items.map((item) => ({
+          '@type': 'MenuItem',
+          name: item.name,
+          url: absoluteUrl(item.path, url),
+          ...(item.description ? { description: item.description } : {}),
+          offers: {
+            '@type': 'AggregateOffer',
+            lowPrice: item.priceFrom,
+            priceCurrency: 'CLP',
+          },
+        })),
+      })),
+    },
     ...(description ? { description } : {}),
     ...(image ? { image: absoluteUrl(image, url) } : {}),
     ...(phone ? { telephone: phone } : {}),

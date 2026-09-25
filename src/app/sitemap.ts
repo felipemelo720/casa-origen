@@ -13,8 +13,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     promotionRepository.findFeaturedBundle(),
   ]);
 
+  const visible = products.filter((product) => product.isVisible);
+  // El home es la carta: cambia cuando cambia algún producto visible.
+  const homeModified = visible.reduce<Date | undefined>(
+    (latest, product) => (!latest || product.updatedAt > latest ? product.updatedAt : latest),
+    undefined,
+  );
+
   return [
-    { url: baseUrl, changeFrequency: 'daily', priority: 1 },
+    { url: baseUrl, lastModified: homeModified, changeFrequency: 'daily', priority: 1 },
     ...(featuredBundle
       ? [
           {
@@ -27,13 +34,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Sólo las fichas visibles. Un producto fuera de la carta (el combo) tiene
     // página propia para poder compartirse, pero anunciarlo al crawler lo
     // pondría a competir con la carta misma; su `metadata` va `noindex`.
-    ...products
-      .filter((product) => product.isVisible)
-      .map((product) => ({
-        url: `${baseUrl}${productPath(product.slug)}`,
-        lastModified: product.updatedAt,
-        changeFrequency: 'weekly' as const,
-        priority: 0.7,
-      })),
+    ...visible.map((product) => ({
+      url: `${baseUrl}${productPath(product.slug)}`,
+      lastModified: product.updatedAt,
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    })),
   ];
 }

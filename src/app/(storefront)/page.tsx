@@ -116,6 +116,17 @@ export default async function HomePage() {
         facebookUrl={settings.facebookUrl}
         schedule={schedule}
         areaServed={zones.map((zone) => zone.name)}
+        menu={menuByCategory.map(({ category, items }) => ({
+          name: category.name,
+          items: items
+            .filter((product) => product.availability === 'AVAILABLE')
+            .map((product) => ({
+              name: product.name,
+              description: product.shortDescription,
+              path: productPath(product.slug),
+              priceFrom: entryPrice(toProductView(product)),
+            })),
+        }))}
       />
 
       {/* Sin `kicker`: era `settings.tagline` («Cocina de origen, sabor de
